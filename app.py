@@ -19,7 +19,7 @@ from keep_alive import keep_alive
 TOKEN = os.getenv("TOKEN", "").strip()
 APPLICATION_ID_TEXT = os.getenv("APPLICATION_ID", "").strip()
 
-COMMAND_PREFIX = "m!"
+COMMAND_PREFIX = ","
 
 BASE_DIR = Path(__file__).resolve().parent
 COGS_DIR = BASE_DIR / "cogs"

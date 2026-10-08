@@ -9,7 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 
 
-DEVELOPER_ID = 1543385262984396852
+DEVELOPER_ID = 1344736884089426022
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "guild_config.json"
 WELCOME_ASSETS_DIR = CONFIG_PATH.parent / "welcome_assets"
 MODULES = {
