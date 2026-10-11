@@ -21,6 +21,7 @@ MODULES = {
     "afk": "AFK",
     "boost": "Boost",
     "musica": "Música",
+    "quotes": "Quotes",
     "resenha": "Resenha",
     "sohakari": "So Hakari",
     "tomate": "Tomates",
