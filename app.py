@@ -100,6 +100,7 @@ class HakariBot(commands.Bot):
             if file.is_file()
             and file.suffix == ".py"
             and not file.name.startswith("__")
+            and file.stem != "components_v2"
         )
 
         if not cog_files:

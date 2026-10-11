@@ -7,7 +7,7 @@ from discord.ext import commands
 from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 
 
-IMAGE_SIZE = (1200, 675)
+IMAGE_SIZE = (1200, 800)
 FONT_PATHS = {
     False: (
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -64,26 +64,24 @@ def wrap_text(
 
 
 def build_quote_image(avatar_data: bytes, quote: str, author: str) -> bytes:
-    canvas = Image.new("RGB", IMAGE_SIZE, (9, 10, 14))
+    canvas = Image.new("RGB", IMAGE_SIZE, (0, 0, 0))
     draw = ImageDraw.Draw(canvas)
-    draw.ellipse((36, 98, 505, 567), fill=(15, 16, 22))
-    draw.line((540, 135, 540, 540), fill=(48, 49, 57), width=2)
 
     with Image.open(BytesIO(avatar_data)) as avatar_source:
         avatar = ImageOps.fit(
             avatar_source.convert("RGB"),
-            (370, 370),
+            (420, 420),
             method=Image.Resampling.LANCZOS,
         )
     avatar = ImageOps.grayscale(avatar).convert("RGB")
     mask = Image.new("L", avatar.size, 0)
-    ImageDraw.Draw(mask).ellipse((0, 0, 369, 369), fill=255)
-    canvas.paste(avatar, (85, 147), mask)
-    draw.ellipse((81, 143, 459, 521), outline=(66, 68, 76), width=3)
+    ImageDraw.Draw(mask).ellipse((0, 0, 419, 419), fill=255)
+    canvas.paste(avatar, (80, 190), mask)
 
     quote = " ".join(quote.split()) or "[Mensagem sem texto]"
     max_lines = 7
-    text_width = 590
+    text_width = 550
+    text_center = 875
     font = load_font(42)
     lines = wrap_text(quote, font, draw, text_width)
     while len(lines) > max_lines and getattr(font, "size", 18) > 22:
@@ -101,7 +99,13 @@ def build_quote_image(avatar_data: bytes, quote: str, author: str) -> bytes:
     line_height = getattr(font, "size", 18) + 12
     text_y = (IMAGE_SIZE[1] - len(lines) * line_height) // 2 - 34
     for line in lines:
-        draw.text((590, text_y), line, font=font, fill=(238, 238, 241))
+        draw.text(
+            (text_center, text_y),
+            line,
+            font=font,
+            fill=(238, 238, 241),
+            anchor="mt",
+        )
         text_y += line_height
 
     signature_y = text_y + 12
@@ -113,10 +117,11 @@ def build_quote_image(avatar_data: bytes, quote: str, author: str) -> bytes:
     ):
         signature_font = load_font(signature_font.size - 1)
     draw.text(
-        (590, signature_y),
+        (text_center, signature_y),
         signature,
         font=signature_font,
         fill=(205, 205, 211),
+        anchor="mt",
     )
     brand_font = load_font(18, bold=True)
     draw.text(
