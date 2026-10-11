@@ -12,6 +12,8 @@ import discord
 from PIL import Image, UnidentifiedImageError
 from discord.ext import commands
 
+from .components_v2 import ComponentsV2View, components_v2
+
 
 MANAGED_ROLE_PREFIXES = ("família -", "cargo -")
 
@@ -787,8 +789,8 @@ class Boost(commands.Cog):
             raise
         return role
 
-    def family_view(self, guild_id: int, owner_id: int) -> discord.ui.View:
-        view = discord.ui.View(timeout=None)
+    def family_view(self, guild_id: int, owner_id: int) -> ComponentsV2View:
+        view = ComponentsV2View(timeout=None)
         buttons = (
             ("Editar cargo", discord.ButtonStyle.primary, "edit"),
             ("Editar ícone", discord.ButtonStyle.secondary, "icon"),
@@ -806,8 +808,8 @@ class Boost(commands.Cog):
             view.add_item(button)
         return view
 
-    def personal_view(self, guild_id: int, owner_id: int) -> discord.ui.View:
-        view = discord.ui.View(timeout=None)
+    def personal_view(self, guild_id: int, owner_id: int) -> ComponentsV2View:
+        view = ComponentsV2View(timeout=None)
         button = discord.ui.Button(
             label="Editar cargo",
             style=discord.ButtonStyle.primary,
@@ -1109,16 +1111,22 @@ class Boost(commands.Cog):
                 await self.save()
             except Exception:
                 await interaction.message.edit(
-                    embed=self.family_embed(interaction.guild, owner_id, state),
-                    view=self.family_view(guild_id, owner_id),
+                    embeds=[],
+                    view=components_v2(
+                        self.family_embed(interaction.guild, owner_id, state),
+                        view=self.family_view(guild_id, owner_id),
+                    ),
                 )
                 return await interaction.followup.send(
                     f"<:wrong:1554659471223947324> Call criada: {voice_channel.mention}, mas não consegui salvar os dados no NeonDB.",
                     ephemeral=True,
                 )
             await interaction.message.edit(
-                embed=self.family_embed(interaction.guild, owner_id, state),
-                view=self.family_view(guild_id, owner_id),
+                embeds=[],
+                view=components_v2(
+                    self.family_embed(interaction.guild, owner_id, state),
+                    view=self.family_view(guild_id, owner_id),
+                ),
             )
             await interaction.followup.send(
                 f"<:correct:1554659481512841267> Call exclusiva criada: {voice_channel.mention}", ephemeral=True
@@ -1251,8 +1259,10 @@ class Boost(commands.Cog):
         state = self.families.get(key)
         if role is not None:
             return await ctx.send(
-                embed=self.family_embed(ctx.guild, ctx.author.id, state),
-                view=self.family_view(ctx.guild.id, ctx.author.id),
+                view=components_v2(
+                    self.family_embed(ctx.guild, ctx.author.id, state),
+                    view=self.family_view(ctx.guild.id, ctx.author.id),
+                ),
             )
 
         try:
@@ -1286,9 +1296,11 @@ class Boost(commands.Cog):
         self.bot.add_view(self.family_view(ctx.guild.id, ctx.author.id))
         state = self.families[key]
         await ctx.send(
-            "<:correct:1554659481512841267> Sua família foi criada. O cargo padrão já está com você; use os botões para editar, criar a call ou gerenciar membros.",
-            embed=self.family_embed(ctx.guild, ctx.author.id, state),
-            view=self.family_view(ctx.guild.id, ctx.author.id),
+            view=components_v2(
+                self.family_embed(ctx.guild, ctx.author.id, state),
+                view=self.family_view(ctx.guild.id, ctx.author.id),
+                content="<:correct:1554659481512841267> Sua família foi criada. O cargo padrão já está com você; use os botões para editar, criar a call ou gerenciar membros.",
+            ),
         )
 
     @commands.command(name="cargo")
@@ -1354,8 +1366,10 @@ class Boost(commands.Cog):
             self.bot.add_view(self.personal_view(ctx.guild.id, ctx.author.id))
 
         await ctx.send(
-            embed=self.personal_role_embed(ctx.guild, ctx.author.id, role),
-            view=self.personal_view(ctx.guild.id, ctx.author.id),
+            view=components_v2(
+                self.personal_role_embed(ctx.guild, ctx.author.id, role),
+                view=self.personal_view(ctx.guild.id, ctx.author.id),
+            ),
         )
 
 

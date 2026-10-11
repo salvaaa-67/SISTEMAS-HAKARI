@@ -2,6 +2,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 
+from .components_v2 import components_v2
+
 
 class ServerInfo(commands.Cog):
     def __init__(self, bot):
@@ -53,7 +55,7 @@ class ServerInfo(commands.Cog):
             inline=False
         )
 
-        await ctx.send(embed=embed)
+        await ctx.send(view=components_v2(embed))
 
     @app_commands.command(name="serverinfo", description="Exibe informações do servidor")
     async def serverinfo_slash(self, interaction: discord.Interaction):
@@ -101,7 +103,7 @@ class ServerInfo(commands.Cog):
             inline=False
         )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(view=components_v2(embed))
 
 
 class UserInfo(commands.Cog):
@@ -144,7 +146,7 @@ class UserInfo(commands.Cog):
             inline=True
         )
 
-        await ctx.send(embed=embed)
+        await ctx.send(view=components_v2(embed))
 
     @app_commands.command(name="userinfo", description="Exibe informações de um usuário")
     async def userinfo_slash(
@@ -186,7 +188,7 @@ class UserInfo(commands.Cog):
             inline=True
         )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(view=components_v2(embed))
 
 
 class Utilities(commands.Cog):
@@ -214,7 +216,7 @@ class Utilities(commands.Cog):
             )
         )
 
-        await ctx.send(embed=embed)
+        await ctx.send(view=components_v2(embed))
 
     @app_commands.command(
         name="ping",
@@ -239,7 +241,7 @@ class Utilities(commands.Cog):
             )
         )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(view=components_v2(embed))
 
     @commands.command(name="ajuda")
     async def ajuda_prefix(self, ctx):
@@ -278,7 +280,7 @@ class Utilities(commands.Cog):
                 text="Use / para ver slash commands!"
             )
 
-        await ctx.send(embed=embed)
+        await ctx.send(view=components_v2(embed))
 
     @app_commands.command(
         name="ajuda",
@@ -320,7 +322,7 @@ class Utilities(commands.Cog):
                 text="Use / para ver mais slash commands!"
             )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(view=components_v2(embed))
 
 
 async def setup(bot):

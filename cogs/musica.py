@@ -16,6 +16,8 @@ import yt_dlp
 from discord import app_commands
 from discord.ext import commands
 
+from .components_v2 import components_v2
+
 
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
@@ -548,7 +550,7 @@ class Music(commands.Cog):
             "adicionada",
             interaction.created_at,
         )
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(view=components_v2(embed))
 
     @app_commands.command(name="pause", description="Pausa a música atual")
     async def pause(self, interaction: discord.Interaction) -> None:
@@ -633,7 +635,7 @@ class Music(commands.Cog):
             )
         embed.set_footer(text=f"Música pulada por {interaction.user.display_name}")
         voice.stop()
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(view=components_v2(embed))
 
     @app_commands.command(name="stop", description="Para a música e limpa a fila")
     async def stop(self, interaction: discord.Interaction) -> None:
@@ -668,7 +670,7 @@ class Music(commands.Cog):
             inline=True,
         )
         embed.set_footer(text=f"Player parado por {interaction.user.display_name}")
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(view=components_v2(embed))
 
     @app_commands.command(name="volume", description="Altera o volume do player")
     @app_commands.describe(percentual="Volume entre 1 e 100")
@@ -699,7 +701,7 @@ class Music(commands.Cog):
         embed.add_field(name="Antes", value=f"{old_volume}%", inline=True)
         embed.add_field(name="Agora", value=f"{percentual}%", inline=True)
         embed.set_footer(text=f"Ajustado por {interaction.user.display_name}")
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(view=components_v2(embed))
 
     @app_commands.command(
         name="infoplayer",
@@ -765,7 +767,9 @@ class Music(commands.Cog):
             inline=False,
         )
         embed.set_footer(text=f"Solicitado por {interaction.user.display_name}")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(
+            view=components_v2(embed), ephemeral=True
+        )
 
     @app_commands.command(
         name="autofix",

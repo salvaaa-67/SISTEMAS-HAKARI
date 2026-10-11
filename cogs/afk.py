@@ -3,6 +3,8 @@ from discord.ext import commands
 from discord import app_commands
 from typing import Optional
 
+from .components_v2 import components_v2
+
 
 class AFK(commands.Cog):
 
@@ -38,7 +40,7 @@ class AFK(commands.Cog):
             inline=False
         )
 
-        await ctx.send(embed=embed)
+        await ctx.send(view=components_v2(embed))
 
     @app_commands.command(
         name="afk",
@@ -74,7 +76,7 @@ class AFK(commands.Cog):
         )
 
         await interaction.response.send_message(
-            embed=embed
+            view=components_v2(embed)
         )
 
     # ===== REMOVER AFK =====
@@ -100,7 +102,7 @@ class AFK(commands.Cog):
             inline=False
         )
 
-        await ctx.send(embed=embed)
+        await ctx.send(view=components_v2(embed))
 
     @app_commands.command(
         name="voltei",
@@ -135,7 +137,7 @@ class AFK(commands.Cog):
         )
 
         await interaction.response.send_message(
-            embed=embed
+            view=components_v2(embed)
         )
 
     # ===== LISTENER PARA MENÇÕES =====
@@ -207,7 +209,7 @@ class AFK(commands.Cog):
             )
 
             await message.reply(
-                embed=embed,
+                view=components_v2(embed),
                 mention_author=False
             )
 

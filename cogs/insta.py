@@ -8,6 +8,8 @@ import asyncpg
 import discord
 from discord.ext import commands
 
+from .components_v2 import ComponentsV2View, components_v2
+
 
 MAX_IMAGE_BYTES = 1024 ** 3
 ALLOWED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
@@ -54,7 +56,7 @@ class CommentModal(discord.ui.Modal):
         )
 
 
-class InstaPostView(discord.ui.View):
+class InstaPostView(ComponentsV2View):
     def __init__(self, cog: "Insta", post_id: int):
         super().__init__(timeout=None)
         self.cog = cog
@@ -119,8 +121,10 @@ class LikeButton(discord.ui.Button):
             count,
         )
         await interaction.message.edit(
-            embed=embed,
-            view=InstaPostView(self.cog, self.post_id),
+            embeds=[],
+            view=components_v2(
+                embed, view=InstaPostView(self.cog, self.post_id)
+            ),
         )
         await interaction.followup.send(message, ephemeral=True)
 
@@ -181,7 +185,7 @@ class CommentsButton(discord.ui.Button):
         comments = await self.cog.get_comments(self.post_id)
         view = CommentsView(self.cog, self.post_id, interaction.user.id, comments)
         await interaction.response.send_message(
-            embed=view.embed(), view=view, ephemeral=True
+            view=components_v2(view.embed(), view=view), ephemeral=True
         )
 
 
@@ -227,7 +231,7 @@ class DeletePostButton(discord.ui.Button):
         await interaction.followup.send("Publicação apagada.", ephemeral=True)
 
 
-class CommentsView(discord.ui.View):
+class CommentsView(ComponentsV2View):
     def __init__(
         self,
         cog: "Insta",
@@ -285,12 +289,18 @@ class CommentsView(discord.ui.View):
 
     async def previous(self, interaction: discord.Interaction) -> None:
         self.page = max(0, self.page - 1)
-        await interaction.response.edit_message(embed=self.embed(), view=self.refresh())
+        view = self.refresh()
+        await interaction.response.edit_message(
+            embeds=[], view=components_v2(self.embed(), view=view)
+        )
 
     async def next(self, interaction: discord.Interaction) -> None:
         max_page = max(0, (len(self.comments) - 1) // COMMENTS_PER_PAGE)
         self.page = min(max_page, self.page + 1)
-        await interaction.response.edit_message(embed=self.embed(), view=self.refresh())
+        view = self.refresh()
+        await interaction.response.edit_message(
+            embeds=[], view=components_v2(self.embed(), view=view)
+        )
 
     def refresh(self) -> "CommentsView":
         return CommentsView(
@@ -530,7 +540,7 @@ class Insta(commands.Cog):
                     0,
                 )
                 published = await message.channel.send(
-                    embed=embed,
+                    view=components_v2(embed),
                     file=discord.File(image_path, filename=safe_filename),
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
@@ -584,7 +594,9 @@ class Insta(commands.Cog):
 
         view = InstaPostView(self, published.id)
         try:
-            await published.edit(view=view)
+            await published.edit(
+                embeds=[], view=components_v2(embed, view=view)
+            )
         except discord.HTTPException:
             await self.pool.execute(
                 "DELETE FROM insta_posts WHERE post_id = $1", published.id

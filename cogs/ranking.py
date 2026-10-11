@@ -8,6 +8,7 @@ import discord
 from discord.ext import commands, tasks
 
 from .menu import DEVELOPER_ID
+from .components_v2 import ComponentsV2View, components_v2
 
 
 LEGACY_CHANNELS = {
@@ -17,7 +18,7 @@ LEGACY_CHANNELS = {
 RANKING_NAMES = {"call": "call", "messages": "mensagens"}
 
 
-class RankingPostView(discord.ui.View):
+class RankingPostView(ComponentsV2View):
     def __init__(self, ranking: "Ranking", ranking_type: str):
         super().__init__(timeout=None)
         self.ranking = ranking
@@ -505,9 +506,9 @@ class Ranking(commands.Cog):
 
         try:
             if message is None:
-                message = await channel.send(embeds=embeds, view=view)
+                message = await channel.send(view=components_v2(embeds, view=view))
             else:
-                await message.edit(embeds=embeds, view=view)
+                await message.edit(embeds=[], view=components_v2(embeds, view=view))
             await self.pool.execute(
                 """
                 INSERT INTO hakari_rank_posts (

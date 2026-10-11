@@ -5,6 +5,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 
+from .components_v2 import components_v2
+
 from .menu import DEVELOPER_ID, WARN_PUNISHMENT_CHOICES
 
 
@@ -360,7 +362,7 @@ class Admin(commands.Cog):
                 inline=False,
             )
         embed.set_footer(text=f"aviso por {ctx.author}", icon_url=ctx.author.display_avatar.url)
-        await ctx.send(embed=embed)
+        await ctx.send(view=components_v2(embed))
 
         try:
             await member.send(
@@ -412,7 +414,7 @@ class Admin(commands.Cog):
                 inline=False,
             )
         embed.set_footer(text=f"Aviso por {interaction.user}", icon_url=interaction.user.display_avatar.url)
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(view=components_v2(embed))
 
         try:
             await member.send(

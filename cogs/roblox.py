@@ -6,6 +6,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from .components_v2 import ComponentsV2View, components_v2
+
 
 ROBLOX_ICON = "<:c_roblox:1555606064890773554>"
 ROBLOX_USERS_API = "https://users.roblox.com/v1/usernames/users"
@@ -13,7 +15,7 @@ ROBLOX_AVATAR_API = "https://thumbnails.roblox.com/v1/users/avatar"
 ROBLOX_TIMEOUT = aiohttp.ClientTimeout(total=15, connect=5)
 
 
-class RobloxAvatarView(discord.ui.View):
+class RobloxAvatarView(ComponentsV2View):
     def __init__(self, cog: "Roblox", post_id: int):
         super().__init__(timeout=None)
         self.add_item(RobloxLikeButton(cog, post_id))
@@ -64,8 +66,11 @@ class RobloxLikeButton(discord.ui.Button):
 
         like_count = await self.cog.like_count(self.post_id)
         await interaction.message.edit(
-            embed=self.cog.avatar_embed(post, like_count),
-            view=RobloxAvatarView(self.cog, self.post_id),
+            embeds=[],
+            view=components_v2(
+                self.cog.avatar_embed(post, like_count),
+                view=RobloxAvatarView(self.cog, self.post_id),
+            ),
         )
         await interaction.followup.send(response, ephemeral=True)
 
@@ -275,7 +280,7 @@ class Roblox(commands.Cog):
         embed = self.avatar_embed(profile, 0)
         try:
             post_message = await channel.send(
-                embed=embed,
+                view=components_v2(embed),
                 allowed_mentions=discord.AllowedMentions.none(),
             )
         except discord.Forbidden:
@@ -306,7 +311,9 @@ class Roblox(commands.Cog):
                 profile["avatar_url"],
             )
             view = RobloxAvatarView(self, post_message.id)
-            await post_message.edit(view=view)
+            await post_message.edit(
+                embeds=[], view=components_v2(embed, view=view)
+            )
         except Exception as error:
             try:
                 await post_message.delete()

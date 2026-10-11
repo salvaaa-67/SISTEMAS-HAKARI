@@ -5,6 +5,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from .components_v2 import components_v2
+
 
 class Welcome(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -108,8 +110,7 @@ class Welcome(commands.Cog):
         channel, content, embed, files, allowed_mentions = message
         try:
             await channel.send(
-                content=content or None,
-                embed=embed,
+                view=components_v2(embed, content=content or None),
                 files=files,
                 allowed_mentions=allowed_mentions,
             )
@@ -132,8 +133,7 @@ class Welcome(commands.Cog):
             )
         _, content, embed, files, _ = message
         await interaction.response.send_message(
-            content=content or None,
-            embed=embed,
+            view=components_v2(embed, content=content or None),
             files=files,
             allowed_mentions=discord.AllowedMentions.none(),
             ephemeral=True,

@@ -8,6 +8,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from .components_v2 import ComponentsV2View, components_v2
+
 
 DEVELOPER_ID = 1344736884089426022
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "guild_config.json"
@@ -505,7 +507,7 @@ class CategorySelect(discord.ui.Select):
         view.setting = None
         view.rebuild()
         await interaction.response.edit_message(
-            embed=view.embed(interaction.guild), view=view
+            embeds=[], view=components_v2(view.embed(interaction.guild), view=view)
         )
 
 
@@ -538,7 +540,7 @@ class SettingSelect(discord.ui.Select):
         view.setting = self.values[0]
         view.rebuild()
         await interaction.response.edit_message(
-            embed=view.embed(interaction.guild), view=view
+            embeds=[], view=components_v2(view.embed(interaction.guild), view=view)
         )
 
 
@@ -565,7 +567,7 @@ class RoleSettingSelect(discord.ui.RoleSelect):
         await view.menu.set_value(interaction.guild_id, view.setting, value)
         view.rebuild()
         await interaction.response.edit_message(
-            embed=view.embed(interaction.guild), view=view
+            embeds=[], view=components_v2(view.embed(interaction.guild), view=view)
         )
 
 
@@ -596,7 +598,7 @@ class ChoiceSettingSelect(discord.ui.Select):
         )
         view.rebuild()
         await interaction.response.edit_message(
-            embed=view.embed(interaction.guild), view=view
+            embeds=[], view=components_v2(view.embed(interaction.guild), view=view)
         )
 
 
@@ -622,7 +624,7 @@ class ChannelSettingSelect(discord.ui.ChannelSelect):
         await view.menu.set_value(interaction.guild_id, view.setting, channel_id)
         view.rebuild()
         await interaction.response.edit_message(
-            embed=view.embed(interaction.guild), view=view
+            embeds=[], view=components_v2(view.embed(interaction.guild), view=view)
         )
 
 
@@ -671,7 +673,7 @@ class ToggleSettingButton(discord.ui.Button):
         await view.menu.set_value(interaction.guild_id, view.setting, not current)
         view.rebuild()
         await interaction.response.edit_message(
-            embed=view.embed(interaction.guild), view=view
+            embeds=[], view=components_v2(view.embed(interaction.guild), view=view)
         )
 
 
@@ -687,8 +689,11 @@ class AccessButton(discord.ui.Button):
                 ephemeral=True,
             )
         await interaction.response.edit_message(
-            embed=view.menu.access_embed(interaction.guild),
-            view=AccessView(view.menu, interaction.guild_id),
+            embeds=[],
+            view=components_v2(
+                view.menu.access_embed(interaction.guild),
+                view=AccessView(view.menu, interaction.guild_id),
+            ),
         )
 
 
@@ -700,7 +705,7 @@ class BackButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         view = MenuView(self.menu, interaction.guild_id, interaction.user.id)
         await interaction.response.edit_message(
-            embed=view.embed(interaction.guild), view=view
+            embeds=[], view=components_v2(view.embed(interaction.guild), view=view)
         )
 
 
@@ -715,8 +720,11 @@ class RestrictedAreaButton(discord.ui.Button):
                 "A Área Restrita é exclusiva do desenvolvedor.", ephemeral=True
             )
         await interaction.response.edit_message(
-            embed=self.menu.restricted_embed(),
-            view=DeveloperToolsView(self.menu, interaction.guild_id),
+            embeds=[],
+            view=components_v2(
+                self.menu.restricted_embed(),
+                view=DeveloperToolsView(self.menu, interaction.guild_id),
+            ),
         )
 
 
@@ -805,18 +813,21 @@ class RunDeveloperActionButton(discord.ui.Button):
             "sync": "sincronizar novamente todos os comandos globais",
         }
         await interaction.response.edit_message(
-            embed=discord.Embed(
-                title="Confirmar ação restrita",
-                description=f"Você está prestes a **{labels[view.action]}**.\n\nConfirme para executar.",
-                color=discord.Color.red(),
-            ),
-            view=ConfirmDeveloperActionView(
-                view.menu, view.guild_id, view.action, command_name
+            embeds=[],
+            view=components_v2(
+                discord.Embed(
+                    title="Confirmar ação restrita",
+                    description=f"Você está prestes a **{labels[view.action]}**.\n\nConfirme para executar.",
+                    color=discord.Color.red(),
+                ),
+                view=ConfirmDeveloperActionView(
+                    view.menu, view.guild_id, view.action, command_name
+                ),
             ),
         )
 
 
-class DeveloperToolsView(discord.ui.View):
+class DeveloperToolsView(ComponentsV2View):
     def __init__(self, menu: "Menu", guild_id: int):
         super().__init__(timeout=300)
         self.menu = menu
@@ -866,12 +877,15 @@ class CancelDeveloperActionButton(discord.ui.Button):
                 "A Área Restrita é exclusiva do desenvolvedor.", ephemeral=True
             )
         await interaction.response.edit_message(
-            embed=self.menu.restricted_embed(),
-            view=DeveloperToolsView(self.menu, self.guild_id),
+            embeds=[],
+            view=components_v2(
+                self.menu.restricted_embed(),
+                view=DeveloperToolsView(self.menu, self.guild_id),
+            ),
         )
 
 
-class ConfirmDeveloperActionView(discord.ui.View):
+class ConfirmDeveloperActionView(ComponentsV2View):
     def __init__(
         self, menu: "Menu", guild_id: int, action: str, command_name: str
     ):
@@ -929,11 +943,12 @@ class AccessUserSelect(discord.ui.UserSelect):
                 current.discard(user.id)
         await view.menu.set_access(interaction.guild_id, current)
         await interaction.response.edit_message(
-            embed=view.menu.access_embed(interaction.guild), view=view
+            embeds=[],
+            view=components_v2(view.menu.access_embed(interaction.guild), view=view)
         )
 
 
-class AccessView(discord.ui.View):
+class AccessView(ComponentsV2View):
     def __init__(self, menu: "Menu", guild_id: int):
         super().__init__(timeout=300)
         self.menu = menu
@@ -943,7 +958,7 @@ class AccessView(discord.ui.View):
         self.add_item(BackButton(menu))
 
 
-class MenuView(discord.ui.View):
+class MenuView(ComponentsV2View):
     def __init__(self, menu: "Menu", guild_id: int, user_id: int | None = None):
         super().__init__(timeout=300)
         self.menu = menu
@@ -1478,7 +1493,8 @@ class Menu(commands.Cog):
         await self.ensure_invite(interaction.guild)
         view = MenuView(self, interaction.guild_id, interaction.user.id)
         await interaction.followup.send(
-            embed=self.overview_embed(interaction.guild), view=view, ephemeral=True
+            view=components_v2(self.overview_embed(interaction.guild), view=view),
+            ephemeral=True,
         )
 
     @app_commands.command(name="menu_sync", description="Atualiza os comandos globais do bot")
