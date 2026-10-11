@@ -12,7 +12,17 @@ class ComponentsV2View(discord.ui.LayoutView):
         self._control_rows: dict[int, discord.ui.ActionRow] = {}
 
     def add_item(self, item: discord.ui.Item) -> ComponentsV2View:
-        if isinstance(item, (discord.ui.Button, discord.ui.Select)):
+        if isinstance(
+            item,
+            (
+                discord.ui.Button,
+                discord.ui.Select,
+                discord.ui.RoleSelect,
+                discord.ui.UserSelect,
+                discord.ui.MentionableSelect,
+                discord.ui.ChannelSelect,
+            ),
+        ):
             row_index = item.row
             if row_index is None:
                 row_index = next(
