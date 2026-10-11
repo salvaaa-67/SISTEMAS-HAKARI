@@ -46,10 +46,16 @@ class ComponentsV2View(discord.ui.LayoutView):
         embeds: discord.Embed | Iterable[discord.Embed] | None = None,
         *,
         content: str | None = None,
+        hero_url: str | None = None,
     ) -> ComponentsV2View:
         for item in self._message_components:
             self.remove_item(item)
         self._message_components.clear()
+
+        if hero_url:
+            hero = discord.ui.MediaGallery()
+            hero.add_item(media=hero_url)
+            self._message_components.append(hero)
 
         if content:
             self._message_components.append(
@@ -105,6 +111,14 @@ class ComponentsV2View(discord.ui.LayoutView):
             text.append(f"-# <t:{int(embed.timestamp.timestamp())}:F>")
 
         children: list[discord.ui.Item] = []
+        author_icon_url = author.get("icon_url") if author else None
+        if author_icon_url and text:
+            author_display = discord.ui.Section(
+                discord.ui.TextDisplay(text.pop(0)),
+                accessory=discord.ui.Thumbnail(media=author_icon_url),
+            )
+            children.append(author_display)
+
         combined_text = "\n\n".join(text)
         while combined_text:
             chunk = combined_text[:4000]
@@ -119,8 +133,6 @@ class ComponentsV2View(discord.ui.LayoutView):
             media = data.get(key)
             if media and media.get("url"):
                 media_urls.append(media["url"])
-        if author and author.get("icon_url"):
-            media_urls.append(author["icon_url"])
         if media_urls:
             gallery = discord.ui.MediaGallery()
             for url in media_urls[:10]:
@@ -138,9 +150,10 @@ def components_v2(
     *,
     view: ComponentsV2View | None = None,
     content: str | None = None,
+    hero_url: str | None = None,
 ) -> ComponentsV2View:
     if view is None:
         view = ComponentsV2View()
     elif not isinstance(view, ComponentsV2View):
         raise TypeError("Components V2 messages require a ComponentsV2View.")
-    return view.set_message(embeds, content=content)
+    return view.set_message(embeds, content=content, hero_url=hero_url)

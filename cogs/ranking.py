@@ -7,7 +7,7 @@ import asyncpg
 import discord
 from discord.ext import commands, tasks
 
-from .menu import DEVELOPER_ID
+from .menu import DEVELOPER_ID, RANKING_INTRO_DESCRIPTION_MAX_LENGTH
 from .components_v2 import ComponentsV2View, components_v2
 
 
@@ -358,7 +358,11 @@ class Ranking(commands.Cog):
         footer = self.setting(guild.id, f"{prefix}_footer", "")
         embed = discord.Embed(
             title=title[:256] if title else None,
-            description=description[:3000] if description else None,
+            description=(
+                description[:RANKING_INTRO_DESCRIPTION_MAX_LENGTH]
+                if description
+                else None
+            ),
             color=discord.Color.blurple(),
         )
         if footer:

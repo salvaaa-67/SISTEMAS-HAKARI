@@ -12,6 +12,8 @@ from .components_v2 import ComponentsV2View, components_v2
 
 
 DEVELOPER_ID = 1344736884089426022
+RANKING_INTRO_DESCRIPTION_MAX_LENGTH = 1500
+FALLBACK_MENU_BANNER = "https://i.postimg.cc/kgv8f49w/banner-hakari-bot.png"
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "guild_config.json"
 WELCOME_ASSETS_DIR = CONFIG_PATH.parent / "welcome_assets"
 MODULES = {
@@ -62,6 +64,7 @@ SETTINGS = {
     },
     "tomate": {
         "label": "Sistema de Tomates",
+        "description": "Defina os cargos com vantagens e ajuste os intervalos entre ações.",
         "items": {
             "target_pick_roles": ("Cargos que escolhem o alvo", "roles"),
             "reduced_cooldown_roles": ("Cargos com intervalo reduzido", "roles"),
@@ -72,6 +75,7 @@ SETTINGS = {
     },
     "welcome": {
         "label": "Boas-vindas",
+        "description": "Escolha o canal e personalize o texto, as menções e as imagens de entrada.",
         "items": {
             "welcome_channel": ("Canal de boas-vindas", "channel"),
             "welcome_ping_role": ("Cargo para ping", "role"),
@@ -82,18 +86,21 @@ SETTINGS = {
     },
     "insta": {
         "label": "Instagram fictício",
+        "description": "Selecione onde as publicações de imagem serão recebidas e exibidas.",
         "items": {
             "insta_channel": ("Canal dos posts", "channel"),
         },
     },
     "roblox": {
         "label": "Avatares Roblox",
+        "description": "Escolha o canal onde os avatares consultados serão publicados.",
         "items": {
             "roblox_channel": ("Canal das skins Roblox", "channel"),
         },
     },
     "ranking_call": {
         "label": "Ranking de call",
+        "description": "Configure o canal e a aparência do ranking de tempo em chamadas.",
         "items": {
             "ranking_call_channel": ("Canal do ranking", "channel"),
             "ranking_call_intro": ("Embed de apresentação", "rank_intro"),
@@ -102,6 +109,7 @@ SETTINGS = {
     },
     "ranking_messages": {
         "label": "Ranking de mensagens",
+        "description": "Configure o canal e a aparência do ranking de mensagens.",
         "items": {
             "ranking_messages_channel": ("Canal do ranking", "channel"),
             "ranking_messages_intro": ("Embed de apresentação", "rank_intro"),
@@ -110,6 +118,7 @@ SETTINGS = {
     },
     "modules": {
         "label": "Módulos",
+        "description": "Ative ou desative os recursos disponíveis para este servidor.",
         "items": {
             f"module_{module}": (f"Ativar {label}", "toggle")
             for module, label in MODULES.items()
@@ -318,10 +327,12 @@ class RankingIntroTextModal(discord.ui.Modal):
             required=False,
         )
         self.description_input = discord.ui.TextInput(
-            label="Description",
-            default=menu.get_value(guild_id, f"{prefix}_description", "") or "",
+            label="Description (máx. 1500 caracteres)",
+            default=(
+                menu.get_value(guild_id, f"{prefix}_description", "") or ""
+            )[:RANKING_INTRO_DESCRIPTION_MAX_LENGTH],
             style=discord.TextStyle.paragraph,
-            max_length=4000,
+            max_length=RANKING_INTRO_DESCRIPTION_MAX_LENGTH,
             required=False,
         )
         self.footer_input = discord.ui.TextInput(
@@ -485,12 +496,16 @@ class RankingTopButton(discord.ui.Button):
 
 
 class CategorySelect(discord.ui.Select):
-    def __init__(self):
+    def __init__(self, view: "MenuView"):
         options = [
             discord.SelectOption(
                 label=details["label"],
                 value=key,
-                description=details.get("description"),
+                description=(
+                    details.get("description")
+                    or f"{len(details['items'])} opções · selecione para configurar"
+                )[:100],
+                default=key == view.category,
             )
             for key, details in SETTINGS.items()
         ]
@@ -507,7 +522,7 @@ class CategorySelect(discord.ui.Select):
         view.setting = None
         view.rebuild()
         await interaction.response.edit_message(
-            embeds=[], view=components_v2(view.embed(interaction.guild), view=view)
+            embeds=[], view=view.message_view(interaction.guild)
         )
 
 
@@ -523,8 +538,19 @@ class SettingSelect(discord.ui.Select):
                     if view.category == "boost"
                     else "Escolha a ação aplicada junto com a advertência."
                     if kind == "choice"
+                    else "Ative ou desative este recurso."
+                    if kind == "toggle"
+                    else "Selecione uma ou mais opções para aplicar."
+                    if kind == "roles"
+                    else "Selecione o item que será usado por este módulo."
+                    if kind in {"role", "channel"}
+                    else "Revise o status atual e abra o editor."
+                    if kind in {"rank_intro", "rank_top", "welcome_text", "welcome_assets"}
+                    else "Defina o valor numérico desta configuração."
+                    if kind == "number"
                     else f"Tipo: {kind}"
                 ),
+                default=key == view.setting,
             )
             for key, (label, kind) in category["items"].items()
         ]
@@ -540,7 +566,7 @@ class SettingSelect(discord.ui.Select):
         view.setting = self.values[0]
         view.rebuild()
         await interaction.response.edit_message(
-            embeds=[], view=components_v2(view.embed(interaction.guild), view=view)
+            embeds=[], view=view.message_view(interaction.guild)
         )
 
 
@@ -567,7 +593,7 @@ class RoleSettingSelect(discord.ui.RoleSelect):
         await view.menu.set_value(interaction.guild_id, view.setting, value)
         view.rebuild()
         await interaction.response.edit_message(
-            embeds=[], view=components_v2(view.embed(interaction.guild), view=view)
+            embeds=[], view=view.message_view(interaction.guild)
         )
 
 
@@ -598,7 +624,7 @@ class ChoiceSettingSelect(discord.ui.Select):
         )
         view.rebuild()
         await interaction.response.edit_message(
-            embeds=[], view=components_v2(view.embed(interaction.guild), view=view)
+            embeds=[], view=view.message_view(interaction.guild)
         )
 
 
@@ -624,7 +650,7 @@ class ChannelSettingSelect(discord.ui.ChannelSelect):
         await view.menu.set_value(interaction.guild_id, view.setting, channel_id)
         view.rebuild()
         await interaction.response.edit_message(
-            embeds=[], view=components_v2(view.embed(interaction.guild), view=view)
+            embeds=[], view=view.message_view(interaction.guild)
         )
 
 
@@ -673,7 +699,7 @@ class ToggleSettingButton(discord.ui.Button):
         await view.menu.set_value(interaction.guild_id, view.setting, not current)
         view.rebuild()
         await interaction.response.edit_message(
-            embeds=[], view=components_v2(view.embed(interaction.guild), view=view)
+            embeds=[], view=view.message_view(interaction.guild)
         )
 
 
@@ -693,6 +719,7 @@ class AccessButton(discord.ui.Button):
             view=components_v2(
                 view.menu.access_embed(interaction.guild),
                 view=AccessView(view.menu, interaction.guild_id),
+                hero_url=view.menu.banner_url(interaction.guild),
             ),
         )
 
@@ -705,7 +732,7 @@ class BackButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         view = MenuView(self.menu, interaction.guild_id, interaction.user.id)
         await interaction.response.edit_message(
-            embeds=[], view=components_v2(view.embed(interaction.guild), view=view)
+            embeds=[], view=view.message_view(interaction.guild)
         )
 
 
@@ -724,6 +751,7 @@ class RestrictedAreaButton(discord.ui.Button):
             view=components_v2(
                 self.menu.restricted_embed(),
                 view=DeveloperToolsView(self.menu, interaction.guild_id),
+                hero_url=self.menu.banner_url(interaction.guild),
             ),
         )
 
@@ -823,6 +851,7 @@ class RunDeveloperActionButton(discord.ui.Button):
                 view=ConfirmDeveloperActionView(
                     view.menu, view.guild_id, view.action, command_name
                 ),
+                hero_url=view.menu.banner_url(interaction.guild),
             ),
         )
 
@@ -881,6 +910,7 @@ class CancelDeveloperActionButton(discord.ui.Button):
             view=components_v2(
                 self.menu.restricted_embed(),
                 view=DeveloperToolsView(self.menu, self.guild_id),
+                hero_url=self.menu.banner_url(interaction.guild),
             ),
         )
 
@@ -944,7 +974,11 @@ class AccessUserSelect(discord.ui.UserSelect):
         await view.menu.set_access(interaction.guild_id, current)
         await interaction.response.edit_message(
             embeds=[],
-            view=components_v2(view.menu.access_embed(interaction.guild), view=view)
+            view=components_v2(
+                view.menu.access_embed(interaction.guild),
+                view=view,
+                hero_url=view.menu.banner_url(interaction.guild),
+            )
         )
 
 
@@ -972,17 +1006,23 @@ class MenuView(ComponentsV2View):
         embed = self.menu.overview_embed(guild)
         if not self.category:
             return embed
-        if self.category == "boost":
-            if self.setting:
-                embed.description += (
-                    "\n\n"
-                    + BOOST_SETTING_DESCRIPTIONS[self.setting]
-                )
-            else:
-                embed.description += "\n\n" + SETTINGS["boost"]["description"]
+        category = SETTINGS[self.category]
+        embed.add_field(
+            name=f"🧭 Área selecionada · {category['label']}",
+            value=category.get(
+                "description",
+                "Escolha uma configuração abaixo para consultar ou editar.",
+            ),
+            inline=False,
+        )
         if not self.setting:
             return embed
         label, kind = SETTINGS[self.category]["items"][self.setting]
+        description = (
+            BOOST_SETTING_DESCRIPTIONS.get(self.setting)
+            if self.category == "boost"
+            else None
+        )
         value = self.menu.get_value(
             guild.id,
             self.setting,
@@ -1051,12 +1091,27 @@ class MenuView(ComponentsV2View):
             display = WARN_PUNISHMENT_CHOICES.get(str(value), "Somente advertência")
         else:
             display = str(value)
-        embed.add_field(name=label, value=display, inline=False)
+        setting_text = f"**Valor atual:** {display}"
+        if description:
+            setting_text += f"\n\n{description}"
+        embed.add_field(
+            name=f"🛠️ Configuração · {label}",
+            value=setting_text,
+            inline=False,
+        )
+        embed.set_footer(text="Use o seletor para trocar a opção; as alterações são salvas automaticamente.")
         return embed
+
+    def message_view(self, guild: discord.Guild) -> ComponentsV2View:
+        return components_v2(
+            self.embed(guild),
+            view=self,
+            hero_url=self.menu.banner_url(guild),
+        )
 
     def rebuild(self) -> None:
         self.clear_items()
-        self.add_item(CategorySelect())
+        self.add_item(CategorySelect(self))
         if self.category:
             self.add_item(SettingSelect(self))
         if self.setting:
@@ -1354,18 +1409,57 @@ class Menu(commands.Cog):
     def overview_embed(self, guild: discord.Guild) -> discord.Embed:
         latency = round(self.bot.latency * 1000)
         embed = discord.Embed(
-            title=f"Painel de configuração | {guild.name}",
+            title=f"Configurações do servidor · {guild.name}",
             description=(
-                f"**Membros:** {guild.member_count or 0}\n"
-                f"**Latência:** {latency} ms\n"
-                f"**Convite:** {self.invite_link(guild)}"
+                "Gerencie os módulos e preferências deste servidor em um só lugar. "
+                "Escolha uma área no seletor abaixo para começar."
             ),
             color=discord.Color.blurple(),
         )
-        if guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
-        embed.set_footer(text=f"Servidor {guild.id} · configurações isoladas por servidor")
+        embed.add_field(
+            name="📊 Visão geral",
+            value=(
+                f"**Membros:** {guild.member_count or 0}\n"
+                f"**Latência:** {latency} ms\n"
+                f"**Servidor:** `{guild.id}`"
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="🧩 Áreas disponíveis",
+            value=" · ".join(category["label"] for category in SETTINGS.values()),
+            inline=True,
+        )
+        module_status = []
+        for module, label in MODULES.items():
+            enabled = bool(self.get_value(guild.id, f"module_{module}", False))
+            if not enabled:
+                status = "Desativado"
+            elif self.module_configured(guild.id, module):
+                status = "Ativo"
+            else:
+                status = "Requer configuração"
+            module_status.append(f"**{label}:** {status}")
+        embed.add_field(
+            name="⚙️ Status dos módulos",
+            value="\n".join(module_status),
+            inline=False,
+        )
+        invite = self.invite_link(guild)
+        invite_display = f"[Abrir convite]({invite})" if invite.startswith(("https://", "http://")) else invite
+        embed.add_field(
+            name="🔗 Convite",
+            value=invite_display,
+            inline=False,
+        )
+        embed.set_footer(
+            text="As configurações são isoladas por servidor · selecione uma área para ver opções e status"
+        )
         return embed
+
+    @staticmethod
+    def banner_url(guild: discord.Guild) -> str:
+        return guild.banner.url if guild.banner else FALLBACK_MENU_BANNER
 
     def invite_link(self, guild: discord.Guild) -> str:
         if guild.vanity_url:
@@ -1493,7 +1587,11 @@ class Menu(commands.Cog):
         await self.ensure_invite(interaction.guild)
         view = MenuView(self, interaction.guild_id, interaction.user.id)
         await interaction.followup.send(
-            view=components_v2(self.overview_embed(interaction.guild), view=view),
+            view=components_v2(
+                view.embed(interaction.guild),
+                view=view,
+                hero_url=self.banner_url(interaction.guild),
+            ),
             ephemeral=True,
         )
 

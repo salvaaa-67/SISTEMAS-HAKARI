@@ -340,10 +340,8 @@ class Music(commands.Cog):
             color=discord.Color.green(),
             timestamp=timestamp,
         )
-        bot_user = self.bot.user
         embed.set_author(
-            name="<:correct:1554659481512841267> Música adicionada à fila",
-            icon_url=bot_user.display_avatar.url if bot_user else None,
+            name="<:correct:1554659481512841267> Música adicionada à fila"
         )
         if track.thumbnail:
             embed.set_thumbnail(url=track.thumbnail)
