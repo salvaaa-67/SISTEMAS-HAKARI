@@ -289,7 +289,7 @@ async def trocar_status() -> None:
         # A lista fica aqui dentro para calcular a latência atual a cada 40s
         status_atualizados = [
             "oi",
-            "HAKARI V2.14.0",
+            "HAKARI V2.15.0",
             "feito pelo salvador",
             f"latência: {round(bot.latency * 1000)}ms",
             "six seven",
