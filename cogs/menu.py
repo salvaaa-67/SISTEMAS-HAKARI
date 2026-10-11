@@ -719,7 +719,7 @@ class AccessButton(discord.ui.Button):
             view=components_v2(
                 view.menu.access_embed(interaction.guild),
                 view=AccessView(view.menu, interaction.guild_id),
-                hero_url=view.menu.banner_url(interaction.guild),
+                hero_url=view.menu.banner_url(),
             ),
         )
 
@@ -751,7 +751,7 @@ class RestrictedAreaButton(discord.ui.Button):
             view=components_v2(
                 self.menu.restricted_embed(),
                 view=DeveloperToolsView(self.menu, interaction.guild_id),
-                hero_url=self.menu.banner_url(interaction.guild),
+                hero_url=self.menu.banner_url(),
             ),
         )
 
@@ -851,7 +851,7 @@ class RunDeveloperActionButton(discord.ui.Button):
                 view=ConfirmDeveloperActionView(
                     view.menu, view.guild_id, view.action, command_name
                 ),
-                hero_url=view.menu.banner_url(interaction.guild),
+                hero_url=view.menu.banner_url(),
             ),
         )
 
@@ -910,7 +910,7 @@ class CancelDeveloperActionButton(discord.ui.Button):
             view=components_v2(
                 self.menu.restricted_embed(),
                 view=DeveloperToolsView(self.menu, self.guild_id),
-                hero_url=self.menu.banner_url(interaction.guild),
+                hero_url=self.menu.banner_url(),
             ),
         )
 
@@ -977,7 +977,7 @@ class AccessUserSelect(discord.ui.UserSelect):
             view=components_v2(
                 view.menu.access_embed(interaction.guild),
                 view=view,
-                hero_url=view.menu.banner_url(interaction.guild),
+                hero_url=view.menu.banner_url(),
             )
         )
 
@@ -1106,7 +1106,7 @@ class MenuView(ComponentsV2View):
         return components_v2(
             self.embed(guild),
             view=self,
-            hero_url=self.menu.banner_url(guild),
+            hero_url=self.menu.banner_url(),
         )
 
     def rebuild(self) -> None:
@@ -1458,8 +1458,8 @@ class Menu(commands.Cog):
         return embed
 
     @staticmethod
-    def banner_url(guild: discord.Guild) -> str:
-        return guild.banner.url if guild.banner else FALLBACK_MENU_BANNER
+    def banner_url() -> str:
+        return FALLBACK_MENU_BANNER
 
     def invite_link(self, guild: discord.Guild) -> str:
         if guild.vanity_url:
@@ -1590,7 +1590,7 @@ class Menu(commands.Cog):
             view=components_v2(
                 view.embed(interaction.guild),
                 view=view,
-                hero_url=self.banner_url(interaction.guild),
+                hero_url=self.banner_url(),
             ),
             ephemeral=True,
         )
