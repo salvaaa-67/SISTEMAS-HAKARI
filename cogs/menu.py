@@ -517,11 +517,12 @@ class CategorySelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         view: MenuView = self.view
         view.category = self.values[0]
         view.setting = None
         view.rebuild()
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             embeds=[], view=view.message_view(interaction.guild)
         )
 
@@ -562,10 +563,11 @@ class SettingSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         view: MenuView = self.view
         view.setting = self.values[0]
         view.rebuild()
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             embeds=[], view=view.message_view(interaction.guild)
         )
 
@@ -585,6 +587,7 @@ class RoleSettingSelect(discord.ui.RoleSelect):
         self.multiple = multiple
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         view: MenuView = self.view
         if self.multiple:
             value = [role.id for role in self.values]
@@ -592,7 +595,7 @@ class RoleSettingSelect(discord.ui.RoleSelect):
             value = self.values[0].id if self.values else None
         await view.menu.set_value(interaction.guild_id, view.setting, value)
         view.rebuild()
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             embeds=[], view=view.message_view(interaction.guild)
         )
 
@@ -618,12 +621,13 @@ class ChoiceSettingSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         view: MenuView = self.view
         await view.menu.set_value(
             interaction.guild_id, view.setting, self.values[0]
         )
         view.rebuild()
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             embeds=[], view=view.message_view(interaction.guild)
         )
 
@@ -645,11 +649,12 @@ class ChannelSettingSelect(discord.ui.ChannelSelect):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         view: MenuView = self.view
         channel_id = self.values[0].id if self.values else None
         await view.menu.set_value(interaction.guild_id, view.setting, channel_id)
         view.rebuild()
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             embeds=[], view=view.message_view(interaction.guild)
         )
 
@@ -971,8 +976,9 @@ class AccessUserSelect(discord.ui.UserSelect):
                 current.add(user.id)
             else:
                 current.discard(user.id)
+        await interaction.response.defer()
         await view.menu.set_access(interaction.guild_id, current)
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             embeds=[],
             view=components_v2(
                 view.menu.access_embed(interaction.guild),
