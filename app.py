@@ -297,7 +297,8 @@ async def trocar_status() -> None:
             "petista!",
             "jogador profissional de liga das lendas",
             "aurudo",
-            "HelloWorld(print)"
+            "HelloWorld(print)",
+            "amigo da floresta"
         ]
 
         await bot.change_presence(
