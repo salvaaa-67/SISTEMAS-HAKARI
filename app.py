@@ -290,10 +290,14 @@ async def trocar_status() -> None:
         status_atualizados = [
             "oi",
             "HAKARI V2.14.0",
-            "feito pelo asta",
+            "feito pelo salvador",
             f"latência: {round(bot.latency * 1000)}ms",
             "six seven",
-            "ser um bot é legal sabia"
+            "ser um bot é legal sabia",
+            "petista!",
+            "jogador profissional de liga das lendas",
+            "aurudo",
+            "HelloWorld(print)"
         ]
 
         await bot.change_presence(
