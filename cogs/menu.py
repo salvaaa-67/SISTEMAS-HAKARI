@@ -1083,7 +1083,7 @@ class RestrictedAreaButton(discord.ui.Button):
         await interaction.response.edit_message(
             embeds=[],
             view=components_v2(
-                self.menu.restricted_embed(),
+                self.menu.restricted_embed(interaction.guild_id),
                 view=DeveloperToolsView(self.menu, interaction.guild_id),
                 hero_url=self.menu.banner_url(),
             ),
@@ -1093,7 +1093,7 @@ class RestrictedAreaButton(discord.ui.Button):
 class DeveloperActionSelect(discord.ui.Select):
     def __init__(self):
         super().__init__(
-            placeholder="Escolha uma ferramenta",
+            placeholder="1. Escolha uma ação restrita",
             min_values=1,
             max_values=1,
             options=[
@@ -1101,6 +1101,7 @@ class DeveloperActionSelect(discord.ui.Select):
                 discord.SelectOption(label="Dessincronizar comando global", value="unsync"),
                 discord.SelectOption(label="Resetar todas as configurações", value="reset"),
                 discord.SelectOption(label="Sincronizar comandos globais", value="sync"),
+                discord.SelectOption(label="Sair de um servidor", value="leave_server"),
             ],
             row=0,
         )
@@ -1127,7 +1128,7 @@ class DeveloperCommandSelect(discord.ui.Select):
             for command in commands_list
         ]
         super().__init__(
-            placeholder="Comando global para dessincronizar",
+            placeholder="Comando global (usado ao dessincronizar)",
             min_values=1,
             max_values=1,
             options=options or [
@@ -1147,7 +1148,7 @@ class DeveloperCommandSelect(discord.ui.Select):
 
 class RunDeveloperActionButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="Continuar", style=discord.ButtonStyle.primary, row=2)
+        super().__init__(label="Continuar", style=discord.ButtonStyle.primary, row=3)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != DEVELOPER_ID:
@@ -1157,7 +1158,7 @@ class RunDeveloperActionButton(discord.ui.Button):
         view: DeveloperToolsView = self.view
         if view.action is None:
             return await interaction.response.send_message(
-                "Escolha uma ferramenta primeiro.", ephemeral=True
+                "Escolha uma ação primeiro.", ephemeral=True
             )
         command_name = (
             view.command_select.values[0]
@@ -1173,17 +1174,47 @@ class RunDeveloperActionButton(discord.ui.Button):
             "unsync": f"dessincronizar globalmente `/{command_name}`",
             "reset": "apagar as configurações de todos os servidores",
             "sync": "sincronizar novamente todos os comandos globais",
+            "leave_server": "sair de um servidor e apagar suas configurações",
         }
+        if view.action == "leave_server":
+            if view.target_guild_id is None:
+                return await interaction.response.send_message(
+                    "Selecione o servidor no menu de servidores antes de continuar.",
+                    ephemeral=True,
+                )
+            target_guild = view.menu.bot.get_guild(view.target_guild_id)
+            if target_guild is None:
+                return await interaction.response.send_message(
+                    "O servidor selecionado não está mais conectado ao bot. "
+                    "Reabra a Área Restrita e tente novamente.",
+                    ephemeral=True,
+                )
+            description = (
+                f"O bot sairá de **{target_guild.name}** (`{target_guild.id}`) "
+                "e todas as configurações do `/menu`, permissões de acesso e "
+                "imagens de boas-vindas desse servidor serão apagadas.\n\n"
+                "Esta ação não pode ser desfeita."
+            )
+        else:
+            description = (
+                f"Você está prestes a **{labels[view.action]}**.\n\n"
+                "Esta ação pode afetar o funcionamento do bot. "
+                "Confirme somente se tiver certeza."
+            )
         await interaction.response.edit_message(
             embeds=[],
             view=components_v2(
                 discord.Embed(
-                    title="Confirmar ação restrita",
-                    description=f"Você está prestes a **{labels[view.action]}**.\n\nConfirme para executar.",
+                    title="Confirmação · ação restrita",
+                    description=description,
                     color=discord.Color.red(),
                 ),
                 view=ConfirmDeveloperActionView(
-                    view.menu, view.guild_id, view.action, command_name
+                    view.menu,
+                    view.guild_id,
+                    view.action,
+                    command_name,
+                    view.target_guild_id,
                 ),
                 hero_url=view.menu.banner_url(),
             ),
@@ -1196,12 +1227,114 @@ class DeveloperToolsView(ComponentsV2View):
         self.menu = menu
         self.guild_id = guild_id
         self.action = None
+        self.guild_page = 0
+        self.target_guild_id: int | None = None
         self.action_select = DeveloperActionSelect()
         self.command_select = DeveloperCommandSelect(menu)
+        self.guild_select = DeveloperGuildSelect(menu, self)
+        self.previous_page_button = DeveloperGuildPageButton(-1)
+        self.next_page_button = DeveloperGuildPageButton(1)
         self.add_item(self.action_select)
         self.add_item(self.command_select)
+        self.add_item(self.guild_select)
+        self.add_item(self.previous_page_button)
+        self.add_item(self.next_page_button)
         self.add_item(RunDeveloperActionButton())
         self.add_item(BackButton(menu))
+        self.refresh_guild_page_buttons()
+
+    def refresh_guild_page_buttons(self) -> None:
+        page_count = self.guild_select.page_count
+        self.previous_page_button.disabled = self.guild_page == 0
+        self.next_page_button.disabled = self.guild_page >= page_count - 1
+
+
+class DeveloperGuildSelect(discord.ui.Select):
+    def __init__(self, menu: "Menu", view: "DeveloperToolsView"):
+        self.menu = menu
+        self.developer_view = view
+        self.guilds = sorted(
+            menu.bot.guilds, key=lambda guild: (guild.name.casefold(), guild.id)
+        )
+        self.page_count = max(1, (len(self.guilds) + 24) // 25)
+        super().__init__(
+            placeholder=(
+                f"Servidor para sair · página 1 de {self.page_count}"
+                if self.guilds
+                else "Nenhum servidor conectado"
+            ),
+            min_values=1,
+            max_values=1,
+            options=self.options_for_page(0),
+            disabled=not self.guilds,
+            row=2,
+        )
+
+    def options_for_page(self, page: int) -> list[discord.SelectOption]:
+        if not self.guilds:
+            return [
+                discord.SelectOption(
+                    label="Nenhum servidor conectado", value="_none"
+                )
+            ]
+        start = page * 25
+        return [
+            discord.SelectOption(
+                label=guild.name[:100] or "Servidor sem nome",
+                value=str(guild.id),
+                description=f"ID: {guild.id}",
+                default=guild.id == self.developer_view.target_guild_id,
+            )
+            for guild in self.guilds[start : start + 25]
+        ]
+
+    def set_page(self, page: int) -> None:
+        self.developer_view.guild_page = page
+        self.options = self.options_for_page(page)
+        self.placeholder = (
+            f"Servidor para sair · página {page + 1} de {self.page_count}"
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != DEVELOPER_ID:
+            return await interaction.response.send_message(
+                "A Área Restrita é exclusiva do desenvolvedor.", ephemeral=True
+            )
+        if not self.values or self.values[0] == "_none":
+            return await interaction.response.send_message(
+                "Não há servidores conectados para selecionar.", ephemeral=True
+            )
+        self.developer_view.target_guild_id = int(self.values[0])
+        await interaction.response.defer()
+
+
+class DeveloperGuildPageButton(discord.ui.Button):
+    def __init__(self, direction: int):
+        self.direction = direction
+        label = "Página anterior" if direction < 0 else "Próxima página"
+        super().__init__(label=label, style=discord.ButtonStyle.secondary, row=3)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != DEVELOPER_ID:
+            return await interaction.response.send_message(
+                "A Área Restrita é exclusiva do desenvolvedor.", ephemeral=True
+            )
+        view: DeveloperToolsView = self.view
+        page_count = view.guild_select.page_count
+        view.guild_page = min(
+            max(0, view.guild_page + self.direction), page_count - 1
+        )
+        view.target_guild_id = None
+        view.guild_select.set_page(view.guild_page)
+        view.refresh_guild_page_buttons()
+        await interaction.response.edit_message(
+            embeds=[],
+            view=components_v2(
+                view.menu.restricted_embed(view.guild_id),
+                view=view,
+                hero_url=view.menu.banner_url(),
+            ),
+        )
 
 
 class ConfirmDeveloperActionButton(discord.ui.Button):
@@ -1217,7 +1350,10 @@ class ConfirmDeveloperActionButton(discord.ui.Button):
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
             result = await view.menu.execute_restricted_action(
-                interaction.user.id, view.action, view.command_name
+                interaction.user.id,
+                view.action,
+                view.command_name,
+                view.target_guild_id,
             )
         except Exception as error:
             return await interaction.followup.send(
@@ -1242,7 +1378,7 @@ class CancelDeveloperActionButton(discord.ui.Button):
         await interaction.response.edit_message(
             embeds=[],
             view=components_v2(
-                self.menu.restricted_embed(),
+                self.menu.restricted_embed(self.guild_id),
                 view=DeveloperToolsView(self.menu, self.guild_id),
                 hero_url=self.menu.banner_url(),
             ),
@@ -1251,12 +1387,18 @@ class CancelDeveloperActionButton(discord.ui.Button):
 
 class ConfirmDeveloperActionView(ComponentsV2View):
     def __init__(
-        self, menu: "Menu", guild_id: int, action: str, command_name: str
+        self,
+        menu: "Menu",
+        guild_id: int,
+        action: str,
+        command_name: str,
+        target_guild_id: int | None = None,
     ):
         super().__init__(timeout=60)
         self.menu = menu
         self.action = action
         self.command_name = command_name
+        self.target_guild_id = target_guild_id
         self.add_item(ConfirmDeveloperActionButton())
         self.add_item(CancelDeveloperActionButton(menu, guild_id))
 
@@ -1858,34 +2000,80 @@ class Menu(commands.Cog):
             return False
         return True
 
-    def restricted_embed(self) -> discord.Embed:
+    def restricted_embed(self, guild_id: int | None = None) -> discord.Embed:
         embed = discord.Embed(
             title="Área Restrita do Desenvolvedor",
-            description="As ações desta área podem afetar todos os servidores conectados.",
+            description=(
+                "Painel de operações globais e por servidor. Escolha uma ação e "
+                "revise a confirmação antes de executá-la."
+            ),
             color=discord.Color.red(),
         )
         embed.add_field(
-            name="Servidores conectados",
-            value=str(len(self.bot.guilds)),
+            name="📡 Estado do bot",
+            value=(
+                f"**Servidores:** {len(self.bot.guilds)}\n"
+                f"**Latência:** {round(self.bot.latency * 1000)} ms\n"
+                f"**Servidor do painel:** `{guild_id}`"
+                if guild_id is not None
+                else (
+                    f"**Servidores:** {len(self.bot.guilds)}\n"
+                    f"**Latência:** {round(self.bot.latency * 1000)} ms"
+                )
+            ),
             inline=True,
         )
         embed.add_field(
-            name="Latência", value=f"{round(self.bot.latency * 1000)} ms", inline=True
+            name="🧰 Ações disponíveis",
+            value=(
+                "• Desligar o bot\n"
+                "• Dessincronizar um comando global\n"
+                "• Resetar as configurações de todos os servidores\n"
+                "• Sincronizar comandos globais\n"
+                "• Sair de um servidor e apagar somente os dados dele\n"
+                "Para essa ação, selecione um servidor; use a paginação para ver todos."
+            ),
+            inline=True,
         )
         embed.add_field(
-            name="Cogs carregadas",
-            value=", ".join(self.bot.cogs.keys()) or "Nenhuma",
+            name="🧩 Cogs carregadas",
+            value=(", ".join(self.bot.cogs.keys()) or "Nenhuma")[:1024],
             inline=False,
+        )
+        embed.set_footer(
+            text="Apenas o desenvolvedor pode usar este painel · ações destrutivas exigem confirmação"
         )
         return embed
 
     async def execute_restricted_action(
-        self, actor_id: int, action: str, command_name: str
+        self,
+        actor_id: int,
+        action: str,
+        command_name: str,
+        target_guild_id: int | None = None,
     ) -> str:
         if actor_id != DEVELOPER_ID:
             raise PermissionError("ACESSO NEGADO: ÁREA EXCLUSIVA DO DESENVOLVEDOR.")
         if action == "shutdown":
             return "Encerrando o bot."
+        if action == "leave_server":
+            if target_guild_id is None:
+                raise ValueError("Informe o servidor do qual o bot deve sair.")
+            guild = self.bot.get_guild(target_guild_id)
+            if guild is None:
+                raise ValueError(
+                    f"O bot não está conectado ao servidor `{target_guild_id}`."
+                )
+            await self.reset_guild_config(target_guild_id)
+            self.invites.pop(target_guild_id, None)
+            await guild.leave(
+                reason="Saída solicitada pelo desenvolvedor pela Área Restrita"
+            )
+            return (
+                f"O bot saiu de **{guild.name}** (`{target_guild_id}`); "
+                "as configurações do `/menu`, permissões de acesso e imagens "
+                "de boas-vindas desse servidor foram apagadas."
+            )
         if action == "reset":
             if self.pool is not None:
                 await self.pool.execute("DELETE FROM hakari_guild_config")
@@ -1923,6 +2111,35 @@ class Menu(commands.Cog):
                 f"Sincronização de guilds: {synced_guilds}/{total_guilds}."
             )
         raise ValueError("Ação restrita desconhecida.")
+
+    async def reset_guild_config(self, guild_id: int) -> None:
+        if self.pool is not None:
+            async with self.pool.acquire() as connection:
+                async with connection.transaction():
+                    await connection.execute(
+                        "DELETE FROM hakari_guild_config WHERE guild_id = $1",
+                        guild_id,
+                    )
+                    await connection.execute(
+                        "DELETE FROM hakari_welcome_assets WHERE guild_id = $1",
+                        guild_id,
+                    )
+
+        self.config.pop(str(guild_id), None)
+        for asset_key in (
+            "welcome_thumbnail",
+            "welcome_image",
+            "welcome_author_icon",
+        ):
+            for suffix in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+                asset_path = WELCOME_ASSETS_DIR / (
+                    f"{guild_id}_{asset_key}{suffix}"
+                )
+                try:
+                    asset_path.unlink()
+                except FileNotFoundError:
+                    pass
+        await self.save()
 
     @app_commands.command(name="menu", description="Abre o painel avançado de configuração do servidor")
     @app_commands.guild_only()
