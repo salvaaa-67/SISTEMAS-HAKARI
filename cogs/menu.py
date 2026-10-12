@@ -92,6 +92,13 @@ SETTINGS = {
             "insta_channel": ("Canal dos posts", "channel"),
         },
     },
+    "quotes": {
+        "label": "Quotes",
+        "description": "Escolha onde as imagens de Quotes serão publicadas.",
+        "items": {
+            "quotes_channel": ("Canal dos Quotes", "channel"),
+        },
+    },
     "roblox": {
         "label": "Avatares Roblox",
         "description": "Escolha o canal onde os avatares consultados serão publicados.",
@@ -638,6 +645,7 @@ class ChannelSettingSelect(discord.ui.ChannelSelect):
         placeholder = {
             "welcome": "Selecione o canal de boas-vindas",
             "insta": "Selecione o canal do Instagram fictício",
+            "quotes": "Selecione o canal dos Quotes",
             "roblox": "Selecione o canal das skins Roblox",
             "ranking_call": "Selecione o canal do ranking de call",
             "ranking_messages": "Selecione o canal do ranking de mensagens",

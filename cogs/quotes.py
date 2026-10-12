@@ -156,6 +156,19 @@ class Quotes(commands.Cog):
         if menu is None or not menu.module_configured(message.guild.id, "quotes"):
             return
 
+        destination = message.channel
+        destination_channel_id = menu.get_value(
+            message.guild.id, "quotes_channel"
+        )
+        if destination_channel_id is not None:
+            destination = message.guild.get_channel(int(destination_channel_id))
+            if not isinstance(destination, discord.TextChannel):
+                print(
+                    f"Quotes: canal configurado não encontrado em {message.guild.id}.",
+                    flush=True,
+                )
+                return
+
         reference = message.reference
         original = reference.resolved
         if not isinstance(original, discord.Message):
@@ -189,7 +202,7 @@ class Quotes(commands.Cog):
                 original.content,
                 original.author.display_name,
             )
-            await message.channel.send(
+            await destination.send(
                 file=discord.File(BytesIO(image_data), filename="hakari_quote.png"),
                 allowed_mentions=discord.AllowedMentions.none(),
             )
