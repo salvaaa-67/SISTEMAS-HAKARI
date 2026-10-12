@@ -1,14 +1,25 @@
+import asyncio
 import json
 import os
+import re
 import shutil
+from io import BytesIO
 from pathlib import Path
 
+import aiohttp
 import asyncpg
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from .components_v2 import ComponentsV2View, components_v2
+from .quotes import (
+    DEFAULT_QUOTE_STYLE,
+    FONT_URLS,
+    build_quote_image,
+    fetch_quote_font,
+    quote_style_with_defaults,
+)
 
 
 DEVELOPER_ID = 1344736884089426022
@@ -94,9 +105,10 @@ SETTINGS = {
     },
     "quotes": {
         "label": "Quotes",
-        "description": "Escolha onde as imagens de Quotes serão publicadas.",
+        "description": "Configure o canal e personalize as imagens de Quotes.",
         "items": {
             "quotes_channel": ("Canal dos Quotes", "channel"),
+            "quotes_style": ("Estilo da imagem", "quotes_style"),
         },
     },
     "roblox": {
@@ -554,7 +566,13 @@ class SettingSelect(discord.ui.Select):
                     else "Selecione o item que será usado por este módulo."
                     if kind in {"role", "channel"}
                     else "Revise o status atual e abra o editor."
-                    if kind in {"rank_intro", "rank_top", "welcome_text", "welcome_assets"}
+                    if kind in {
+                        "rank_intro",
+                        "rank_top",
+                        "welcome_text",
+                        "welcome_assets",
+                        "quotes_style",
+                    }
                     else "Defina o valor numérico desta configuração."
                     if kind == "number"
                     else f"Tipo: {kind}"
@@ -665,6 +683,308 @@ class ChannelSettingSelect(discord.ui.ChannelSelect):
         view.rebuild()
         await interaction.edit_original_response(
             embeds=[], view=view.message_view(interaction.guild)
+        )
+
+
+QUOTE_AVATAR_POSITIONS = {
+    "left": "Esquerda",
+    "right": "Direita",
+    "top": "Em cima",
+    "bottom": "Em baixo",
+    "hidden": "Removido",
+}
+QUOTE_STYLE_SELECTS = {
+    "font": {
+        "default": "Padrão do bot",
+        **{key: name for key, (name, _) in FONT_URLS.items()},
+    },
+    "avatar_position": QUOTE_AVATAR_POSITIONS,
+    "background_mode": {"solid": "Cor sólida", "gradient": "Gradiente"},
+    "avatar_grayscale": {"true": "Preto e branco", "false": "Colorido"},
+}
+
+
+class QuoteStyleSelect(discord.ui.Select):
+    def __init__(self, setting: str, placeholder: str, options: dict[str, str], current: str):
+        super().__init__(
+            placeholder=placeholder,
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(
+                    label=label,
+                    value=value,
+                    default=value == current,
+                )
+                for value, label in options.items()
+            ],
+        )
+        self.setting = setting
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view: QuoteStyleView = self.view
+        value = self.values[0]
+        if self.setting == "avatar_grayscale":
+            value = value == "true"
+        style = view.style()
+        style[self.setting] = value
+        await view.menu.set_value(interaction.guild_id, "quotes_style", style)
+        refreshed_view = QuoteStyleView(view.menu, interaction.guild_id)
+        await interaction.response.edit_message(
+            embed=refreshed_view.embed(), view=refreshed_view
+        )
+
+
+class QuoteColorsModal(discord.ui.Modal):
+    def __init__(self, view: "QuoteStyleView"):
+        super().__init__(title="Cores da imagem de Quotes")
+        self.style_view = view
+        self.menu = view.menu
+        self.guild_id = view.guild_id
+        self.background_input = discord.ui.TextInput(
+            label="Cor de fundo (HEX)",
+            placeholder="#000000",
+            default=view.style()["background_color"],
+            min_length=7,
+            max_length=7,
+        )
+        self.gradient_input = discord.ui.TextInput(
+            label="Segunda cor do gradiente (HEX)",
+            placeholder="#252542",
+            default=view.style()["gradient_color"],
+            min_length=7,
+            max_length=7,
+        )
+        self.text_input = discord.ui.TextInput(
+            label="Cor do texto (HEX)",
+            placeholder="#EEEEF1",
+            default=view.style()["text_color"],
+            min_length=7,
+            max_length=7,
+        )
+        self.signature_input = discord.ui.TextInput(
+            label="Cor da assinatura (HEX)",
+            placeholder="#CDCDD3",
+            default=view.style()["signature_color"],
+            min_length=7,
+            max_length=7,
+        )
+        for field in (
+            self.background_input,
+            self.gradient_input,
+            self.text_input,
+            self.signature_input,
+        ):
+            self.add_item(field)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        values = {
+            "background_color": self.background_input.value.strip().upper(),
+            "gradient_color": self.gradient_input.value.strip().upper(),
+            "text_color": self.text_input.value.strip().upper(),
+            "signature_color": self.signature_input.value.strip().upper(),
+        }
+        if any(
+            re.fullmatch(r"#[0-9A-F]{6}", value) is None
+            for value in values.values()
+        ):
+            return await interaction.response.send_message(
+                "Use cores no formato hexadecimal #RRGGBB, por exemplo #12ABEF.",
+                ephemeral=True,
+            )
+        style = self.style_view.style()
+        style.update(values)
+        await self.menu.set_value(self.guild_id, "quotes_style", style)
+        await interaction.response.send_message(
+            "Cores dos Quotes salvas.", ephemeral=True
+        )
+
+
+class QuoteColorsButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(
+            label="Editar cores",
+            style=discord.ButtonStyle.primary,
+            row=4,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(QuoteColorsModal(self.view))
+
+
+class QuotePreviewButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(
+            label="Prévia efêmera",
+            style=discord.ButtonStyle.success,
+            row=4,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view: QuoteStyleView = self.view
+        user = view.menu.bot.user
+        if user is None:
+            return await interaction.response.send_message(
+                "Não foi possível carregar o avatar do bot para a prévia.",
+                ephemeral=True,
+            )
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            style = view.style()
+            font_data = await fetch_quote_font(style["font"])
+            avatar_data = await user.display_avatar.read()
+            image_data = await asyncio.to_thread(
+                build_quote_image,
+                avatar_data,
+                "Este texto é onde a sua fonte customizada aparece.",
+                user.display_name,
+                style,
+                font_data,
+            )
+        except (
+            aiohttp.ClientError,
+            asyncio.TimeoutError,
+            discord.HTTPException,
+            OSError,
+            ValueError,
+        ) as error:
+            print(
+                f"Quotes: falha ao gerar prévia em {view.guild_id}: "
+                f"{type(error).__name__}: {error}",
+                flush=True,
+            )
+            return await interaction.followup.send(
+                "Não foi possível gerar a prévia. Confira a fonte selecionada e tente novamente.",
+                ephemeral=True,
+            )
+        await interaction.followup.send(
+            file=discord.File(BytesIO(image_data), filename="hakari_quote_preview.png"),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+
+class QuoteStyleResetButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(
+            label="Restaurar padrão",
+            style=discord.ButtonStyle.secondary,
+            row=4,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view: QuoteStyleView = self.view
+        await view.menu.set_value(
+            interaction.guild_id, "quotes_style", DEFAULT_QUOTE_STYLE.copy()
+        )
+        refreshed_view = QuoteStyleView(view.menu, interaction.guild_id)
+        await interaction.response.edit_message(
+            embed=refreshed_view.embed(), view=refreshed_view
+        )
+
+
+class QuoteStyleView(discord.ui.View):
+    def __init__(self, menu: "Menu", guild_id: int):
+        super().__init__(timeout=300)
+        self.menu = menu
+        self.guild_id = guild_id
+        style = self.style()
+        self.add_item(
+            QuoteStyleSelect(
+                "font",
+                "Fonte (20 fontes online)",
+                QUOTE_STYLE_SELECTS["font"],
+                style["font"],
+            )
+        )
+        self.add_item(
+            QuoteStyleSelect(
+                "avatar_position",
+                "Posição da foto de perfil",
+                QUOTE_STYLE_SELECTS["avatar_position"],
+                style["avatar_position"],
+            )
+        )
+        self.add_item(
+            QuoteStyleSelect(
+                "background_mode",
+                "Fundo",
+                QUOTE_STYLE_SELECTS["background_mode"],
+                style["background_mode"],
+            )
+        )
+        self.add_item(
+            QuoteStyleSelect(
+                "avatar_grayscale",
+                "Aparência da foto de perfil",
+                QUOTE_STYLE_SELECTS["avatar_grayscale"],
+                str(style["avatar_grayscale"]).lower(),
+            )
+        )
+        self.add_item(QuoteColorsButton())
+        self.add_item(QuotePreviewButton())
+        self.add_item(QuoteStyleResetButton())
+
+    def style(self) -> dict:
+        return quote_style_with_defaults(
+            self.menu.get_value(
+                self.guild_id, "quotes_style", DEFAULT_QUOTE_STYLE
+            )
+        )
+
+    def embed(self) -> discord.Embed:
+        style = self.style()
+        font_label = QUOTE_STYLE_SELECTS["font"][style["font"]]
+        avatar_label = QUOTE_AVATAR_POSITIONS[style["avatar_position"]]
+        background = (
+            f"Gradiente: {style['background_color']} → {style['gradient_color']}"
+            if style["background_mode"] == "gradient"
+            else style["background_color"]
+        )
+        embed = discord.Embed(
+            title="Estilo das imagens de Quotes",
+            description=(
+                "As alterações são aplicadas automaticamente aos próximos Quotes. "
+                "As 20 fontes customizadas são carregadas do Google Fonts quando usadas."
+            ),
+            color=discord.Color.blurple(),
+        )
+        embed.add_field(
+            name="Fonte",
+            value=font_label,
+            inline=True,
+        )
+        embed.add_field(
+            name="Foto de perfil",
+            value=(
+                f"{avatar_label} · "
+                f"{'preto e branco' if style['avatar_grayscale'] else 'colorida'}"
+            ),
+            inline=True,
+        )
+        embed.add_field(name="Fundo", value=background, inline=True)
+        embed.add_field(
+            name="Texto / assinatura",
+            value=f"{style['text_color']} / {style['signature_color']}",
+            inline=True,
+        )
+        return embed
+
+
+class QuoteStyleButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(
+            label="Estilizar imagem",
+            style=discord.ButtonStyle.primary,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view: MenuView = self.view
+        style_view = QuoteStyleView(view.menu, interaction.guild_id)
+        await interaction.response.send_message(
+            embed=style_view.embed(),
+            view=style_view,
+            ephemeral=True,
         )
 
 
@@ -1085,6 +1405,18 @@ class MenuView(ComponentsV2View):
                 f"Imagem: {image or 'não enviada'}\n"
                 f"Ícone do título: {author_icon or 'não enviado'}"
             )
+        elif kind == "quotes_style":
+            style = quote_style_with_defaults(
+                self.menu.get_value(
+                    guild.id, "quotes_style", DEFAULT_QUOTE_STYLE
+                )
+            )
+            display = (
+                f"Fonte: {QUOTE_STYLE_SELECTS['font'][style['font']]}\n"
+                f"Foto de perfil: "
+                f"{QUOTE_AVATAR_POSITIONS[style['avatar_position']]}\n"
+                f"Fundo: {style['background_mode']}"
+            )
         elif value is None:
             display = "Desconfigurado"
         elif kind == "role":
@@ -1139,6 +1471,8 @@ class MenuView(ComponentsV2View):
                 self.add_item(ChoiceSettingSelect(self))
             elif kind == "channel":
                 self.add_item(ChannelSettingSelect(self))
+            elif kind == "quotes_style":
+                self.add_item(QuoteStyleButton())
             elif kind == "number":
                 label = SETTINGS[self.category]["items"][self.setting][0]
                 self.add_item(NumberSettingButton(self, label))
