@@ -80,6 +80,7 @@ class Ranking(commands.Cog):
         self.pool: asyncpg.Pool | None = None
         self.sessions_initialized = False
         self.update_locks: dict[tuple[int, str], asyncio.Lock] = {}
+        self.update_semaphore = asyncio.Semaphore(5)
 
     async def cog_load(self) -> None:
         database_url = os.getenv("DATABASE", "").strip()
@@ -327,7 +328,8 @@ class Ranking(commands.Cog):
         if self.pool is None:
             return
         async with self.update_lock(guild.id, ranking_type):
-            await self.publish_ranking(guild, ranking_type)
+            async with self.update_semaphore:
+                await self.publish_ranking(guild, ranking_type)
 
     def ranking_config_prefix(self, ranking_type: str) -> str:
         return "ranking_call" if ranking_type == "call" else "ranking_messages"

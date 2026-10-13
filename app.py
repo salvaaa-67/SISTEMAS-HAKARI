@@ -66,7 +66,8 @@ class HakariBot(commands.Bot):
             help_command=None,
             case_insensitive=True,
         )
-        self.guild_commands_synced = False
+        self.guild_command_sync_attempted = False
+        self.guild_command_sync_semaphore = asyncio.Semaphore(5)
 
     async def setup_hook(self) -> None:
         """
@@ -236,7 +237,8 @@ class HakariBot(commands.Bot):
         guild_object = discord.Object(id=guild.id)
         self.tree.clear_commands(guild=guild_object)
         self.tree.copy_global_to(guild=guild_object)
-        return await self.tree.sync(guild=guild_object)
+        async with self.guild_command_sync_semaphore:
+            return await self.tree.sync(guild=guild_object)
 
     async def sync_commands_to_all_guilds(self) -> tuple[int, int]:
         guilds = list(self.guilds)
@@ -253,7 +255,6 @@ class HakariBot(commands.Bot):
                 )
             else:
                 synced_guilds += 1
-        self.guild_commands_synced = synced_guilds == len(guilds)
         return synced_guilds, len(guilds)
 
     async def sync_all_slash_commands(self) -> tuple[int, int, int]:
@@ -275,9 +276,39 @@ async def on_app_command_error(
     error: app_commands.AppCommandError,
 ) -> None:
     original_error = getattr(error, "original", error)
+    command_name = (
+        interaction.command.qualified_name
+        if interaction.command is not None
+        else "desconhecido"
+    )
     print(
-        f"Erro em comando slash: {type(original_error).__name__}: {original_error}",
+        f"Erro em comando slash /{command_name} "
+        f"(guild={interaction.guild_id}, user={interaction.user.id}): "
+        f"{type(original_error).__name__}: {original_error}",
         flush=True,
+    )
+    if isinstance(original_error, discord.HTTPException):
+        response = getattr(original_error, "response", None)
+        headers = getattr(response, "headers", {})
+        request_info = getattr(response, "request_info", None)
+        method = getattr(request_info, "method", None)
+        url = getattr(request_info, "url", None)
+        route = getattr(url, "path", None)
+        retry_after = headers.get("Retry-After")
+        bucket = headers.get("X-RateLimit-Bucket")
+        if method or route or retry_after or bucket:
+            print(
+                f"Detalhes HTTP do comando /{command_name}: "
+                f"method={method or 'indisponível'}, "
+                f"route={route or 'indisponível'}, "
+                f"retry_after={retry_after or 'indisponível'}, "
+                f"bucket={bucket or 'indisponível'}",
+                flush=True,
+            )
+    traceback.print_exception(
+        type(original_error),
+        original_error,
+        original_error.__traceback__,
     )
 
 
@@ -347,7 +378,8 @@ async def on_ready() -> None:
     if bot.user is None:
         return
 
-    if not bot.guild_commands_synced:
+    if not bot.guild_command_sync_attempted:
+        bot.guild_command_sync_attempted = True
         synced_guilds, total_guilds = await bot.sync_commands_to_all_guilds()
         print(
             f"🔁 Comandos sincronizados em {synced_guilds}/{total_guilds} servidores.",
