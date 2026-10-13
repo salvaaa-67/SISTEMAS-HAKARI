@@ -249,13 +249,9 @@ class Tomate(commands.Cog):
             if bot_owner or server_owner:
 
                 try:
-                    user = await self.bot.fetch_user(
-                        payload.user_id
-                    )
-
                     await message.remove_reaction(
                         payload.emoji,
-                        user
+                        discord.Object(id=payload.user_id)
                     )
 
                 except discord.Forbidden:
@@ -271,18 +267,13 @@ class Tomate(commands.Cog):
             return
 
         try:
-
-            user = await self.bot.fetch_user(
-                payload.user_id
-            )
-
             await message.remove_reaction(
                 payload.emoji,
-                user
+                discord.Object(id=payload.user_id)
             )
 
             await channel.send(
-                f"sub5 {user.mention} tacando tomate no true mogger🤣🤣🤣"
+                f"sub5 <@{payload.user_id}> tacando tomate no true mogger🤣🤣🤣"
             )
 
         except discord.Forbidden:
@@ -380,4 +371,3 @@ class Tomate(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Tomate(bot))
-

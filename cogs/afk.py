@@ -162,13 +162,21 @@ class AFK(commands.Cog):
         # Verificar resposta a alguém AFK
         if message.reference:
             try:
-                replied_message = await message.channel.fetch_message(
-                    message.reference.message_id
-                )
+                replied_message = message.reference.resolved
+                if not isinstance(replied_message, discord.Message):
+                    if message.reference.message_id is None:
+                        replied_message = None
+                    else:
+                        replied_message = await message.channel.fetch_message(
+                            message.reference.message_id
+                        )
 
-                user = replied_message.author
+                if replied_message is None:
+                    user = None
+                else:
+                    user = replied_message.author
 
-                if user.id in self.afk_users:
+                if user is not None and user.id in self.afk_users:
                     afk_mentioned.append(
                         (user, self.afk_users[user.id])
                     )
