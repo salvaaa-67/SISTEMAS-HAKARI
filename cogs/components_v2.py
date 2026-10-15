@@ -122,10 +122,16 @@ class ComponentsV2View(discord.ui.LayoutView):
 
         children: list[discord.ui.Item] = []
         author_icon_url = author.get("icon_url") if author else None
-        if author_icon_url and text:
+        thumbnail = data.get("thumbnail")
+        thumbnail_url = thumbnail.get("url") if thumbnail else None
+        accessory_url = author_icon_url or thumbnail_url
+        thumbnail_used_as_accessory = bool(
+            thumbnail_url and text and not author_icon_url
+        )
+        if accessory_url and text:
             author_display = discord.ui.Section(
                 discord.ui.TextDisplay(text.pop(0)),
-                accessory=discord.ui.Thumbnail(media=author_icon_url),
+                accessory=discord.ui.Thumbnail(media=accessory_url),
             )
             children.append(author_display)
 
@@ -139,10 +145,11 @@ class ComponentsV2View(discord.ui.LayoutView):
             combined_text = combined_text[len(chunk):].lstrip()
 
         media_urls = []
-        for key in ("thumbnail", "image"):
-            media = data.get(key)
-            if media and media.get("url"):
-                media_urls.append(media["url"])
+        if thumbnail_url and not thumbnail_used_as_accessory:
+            media_urls.append(thumbnail_url)
+        image = data.get("image")
+        if image and image.get("url"):
+            media_urls.append(image["url"])
         if media_urls:
             gallery = discord.ui.MediaGallery()
             for url in media_urls[:10]:

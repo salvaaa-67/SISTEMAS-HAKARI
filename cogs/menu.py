@@ -25,6 +25,7 @@ from .quotes import (
 DEVELOPER_ID = 1344736884089426022
 RANKING_INTRO_DESCRIPTION_MAX_LENGTH = 1500
 FALLBACK_MENU_BANNER = "https://i.postimg.cc/kgv8f49w/banner-hakari-bot.png"
+MENU_WEBSITE_URL = "https://sistemas-hakari-igw0.onrender.com/"
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "guild_config.json"
 WELCOME_ASSETS_DIR = CONFIG_PATH.parent / "welcome_assets"
 MODULES = {
@@ -534,6 +535,7 @@ class CategorySelect(discord.ui.Select):
             min_values=1,
             max_values=1,
             options=options,
+            row=1,
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -586,6 +588,7 @@ class SettingSelect(discord.ui.Select):
             min_values=1,
             max_values=1,
             options=options,
+            row=2,
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -1595,11 +1598,17 @@ class MenuView(ComponentsV2View):
         return components_v2(
             self.embed(guild),
             view=self,
-            hero_url=self.menu.banner_url(),
         )
 
     def rebuild(self) -> None:
         self.clear_items()
+        self.add_item(
+            discord.ui.Button(
+                label="Abrir site",
+                url=MENU_WEBSITE_URL,
+                row=0,
+            )
+        )
         self.add_item(CategorySelect(self))
         if self.category:
             self.add_item(SettingSelect(self))
@@ -1898,53 +1907,45 @@ class Menu(commands.Cog):
         return True
 
     def overview_embed(self, guild: discord.Guild) -> discord.Embed:
-        latency = round(self.bot.latency * 1000)
         embed = discord.Embed(
-            title=f"Configurações do servidor · {guild.name}",
+            title="Oiii...! Eu sou a Larp ♥",
             description=(
-                "Gerencie os módulos e preferências deste servidor em um só lugar. "
-                "Escolha uma área no seletor abaixo para começar."
+                "proteção, automação e comunidade reunidas em um único painel"
             ),
             color=discord.Color.blurple(),
         )
         embed.add_field(
-            name="📊 Visão geral",
+            name="Comece pelo essencial",
             value=(
-                f"**Membros:** {guild.member_count or 0}\n"
-                f"**Latência:** {latency} ms\n"
-                f"**Servidor:** `{guild.id}`"
+                "1. 🔒 **Proteja**\n"
+                "- anti-nuke, backups e moderação\n"
+                "2. 🧾 **Registre**\n"
+                "- logs de mensagens, cargos, canais e voz\n"
+                "3. 📌 **Organize**\n"
+                "- cargo por perfil, autorole, tickets e rankings"
             ),
-            inline=True,
-        )
-        embed.add_field(
-            name="🧩 Áreas disponíveis",
-            value=" · ".join(category["label"] for category in SETTINGS.values()),
-            inline=True,
-        )
-        module_status = []
-        for module, label in MODULES.items():
-            enabled = bool(self.get_value(guild.id, f"module_{module}", False))
-            if not enabled:
-                status = "Desativado"
-            elif self.module_configured(guild.id, module):
-                status = "Ativo"
-            else:
-                status = "Requer configuração"
-            module_status.append(f"**{label}:** {status}")
-        embed.add_field(
-            name="⚙️ Status dos módulos",
-            value="\n".join(module_status),
             inline=False,
         )
-        invite = self.invite_link(guild)
-        invite_display = f"[Abrir convite]({invite})" if invite.startswith(("https://", "http://")) else invite
         embed.add_field(
-            name="🔗 Convite",
-            value=invite_display,
+            name="Website",
+            value=(
+                "Conheça o site oficial com mais informações sobre o bot."
+            ),
             inline=False,
         )
+        embed.add_field(
+            name="Escolha por onde começar",
+            value=(
+                "Só quem usa o comando consegue interagir com este painel — "
+                "o dono consegue liberar usuários utilizando `perm - dar acesso`."
+            ),
+            inline=False,
+        )
+        if self.bot.user:
+            embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+        embed.set_image(url=self.banner_url())
         embed.set_footer(
-            text="As configurações são isoladas por servidor · selecione uma área para ver opções e status"
+            text="Use `ajuda` para abrir o painel de comandos."
         )
         return embed
 
@@ -2156,7 +2157,6 @@ class Menu(commands.Cog):
             view=components_v2(
                 view.embed(interaction.guild),
                 view=view,
-                hero_url=self.banner_url(),
             ),
             ephemeral=True,
         )
