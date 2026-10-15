@@ -3,6 +3,8 @@ import json
 import os
 import re
 import shutil
+from collections import OrderedDict
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 
@@ -1737,11 +1739,261 @@ class Menu(commands.Cog):
         self.config: dict[str, dict] = {}
         self.invites: dict[int, str] = {}
         self.pool: asyncpg.Pool | None = None
+        self.message_cache: OrderedDict[
+            tuple[int, int, int], discord.Message
+        ] = OrderedDict()
+        self.recent_delete_audit_entries: dict[
+            tuple[int, int], list[tuple[discord.AuditLogEntry, bool]]
+        ] = {}
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message) -> None:
+        if (
+            message.guild is None
+            or self.get_value(message.guild.id, "audit_log_channel") is None
+        ):
+            return
+
+        key = (message.guild.id, message.channel.id, message.id)
+        self.message_cache[key] = message
+        self.message_cache.move_to_end(key)
+        while len(self.message_cache) > 2000:
+            self.message_cache.popitem(last=False)
+
+    @commands.Cog.listener()
+    async def on_raw_message_delete(
+        self, payload: discord.RawMessageDeleteEvent
+    ) -> None:
+        if payload.guild_id is None:
+            return
+
+        guild = self.bot.get_guild(payload.guild_id)
+        if guild is None:
+            return
+
+        key = (payload.guild_id, payload.channel_id, payload.message_id)
+        cached_message = self.message_cache.pop(key, None)
+        message = payload.cached_message or cached_message
+        await self.send_deleted_messages_log(
+            guild,
+            payload.channel_id,
+            [message] if message is not None else [],
+            [payload.message_id],
+            bulk=False,
+        )
+
+    @commands.Cog.listener()
+    async def on_raw_bulk_message_delete(
+        self, payload: discord.RawBulkMessageDeleteEvent
+    ) -> None:
+        if payload.guild_id is None:
+            return
+
+        guild = self.bot.get_guild(payload.guild_id)
+        if guild is None:
+            return
+
+        messages_by_id = {
+            message.id: message for message in payload.cached_messages
+        }
+        for message_id in payload.message_ids:
+            key = (payload.guild_id, payload.channel_id, message_id)
+            cached_message = self.message_cache.pop(key, None)
+            if cached_message is not None:
+                messages_by_id.setdefault(message_id, cached_message)
+
+        await self.send_deleted_messages_log(
+            guild,
+            payload.channel_id,
+            list(messages_by_id.values()),
+            sorted(payload.message_ids),
+            bulk=True,
+        )
+
+    async def find_message_delete_actor(
+        self,
+        guild: discord.Guild,
+        channel_id: int,
+        deleted_at: datetime,
+        *,
+        bulk: bool,
+    ) -> discord.User | discord.Member | None:
+        entries = self.recent_delete_audit_entries.get(
+            (guild.id, channel_id), []
+        )
+        for index, (entry, used) in enumerate(entries):
+            if used or abs((entry.created_at - deleted_at).total_seconds()) > 15:
+                continue
+            if bulk != (
+                entry.action is discord.AuditLogAction.message_bulk_delete
+            ):
+                continue
+            entries[index] = (entry, True)
+            return entry.user
+        return None
+
+    async def send_deleted_messages_log(
+        self,
+        guild: discord.Guild,
+        channel_id: int,
+        messages: list[discord.Message],
+        message_ids: list[int],
+        *,
+        bulk: bool,
+    ) -> None:
+        log_channel_id = self.get_value(guild.id, "audit_log_channel")
+        log_channel = (
+            guild.get_channel(int(log_channel_id))
+            if log_channel_id is not None
+            else None
+        )
+        if log_channel is None or not hasattr(log_channel, "send"):
+            if log_channel_id is not None:
+                print(
+                    f"Canal de registros {log_channel_id} não encontrado "
+                    f"no servidor {guild.id}.",
+                    flush=True,
+                )
+            return
+
+        deleted_at = datetime.now(timezone.utc)
+        await asyncio.sleep(1)
+        actor = await self.find_message_delete_actor(
+            guild, channel_id, deleted_at, bulk=bulk
+        )
+        channel = guild.get_channel_or_thread(channel_id)
+        channel_text = (
+            f"{channel.mention} (`{channel.name}` · `{channel_id}`)"
+            if channel is not None
+            else f"<#{channel_id}> (`{channel_id}`)"
+        )
+        title = (
+            f"🗑️ {len(message_ids)} mensagens deletadas"
+            if bulk
+            else "🗑️ Mensagem deletada"
+        )
+        embed = discord.Embed(
+            title=title,
+            color=discord.Color.from_rgb(220, 54, 77),
+            timestamp=deleted_at,
+        )
+        embed.add_field(
+            name="Ação realizada por",
+            value=(
+                f"{actor.mention} (`{actor}` · `{actor.id}`)"
+                if actor is not None
+                else "Não identificado pelo Registro de Auditoria"
+            ),
+            inline=False,
+        )
+        embed.add_field(name="Canal", value=channel_text, inline=False)
+
+        display_messages = messages[:4]
+        author_ids = []
+        if display_messages:
+            for index, message in enumerate(display_messages, start=1):
+                author = message.author
+                author_mention = getattr(author, "mention", None)
+                author_text = (
+                    f"{author_mention} (`{author}` · `{author.id}`)"
+                    if author_mention
+                    else f"`{author}`"
+                )
+                author_ids.append(str(author.id))
+                source_parts = [message.content.strip()] if message.content.strip() else []
+                for original_embed in message.embeds[:2]:
+                    embed_parts = [
+                        part
+                        for part in (
+                            original_embed.title,
+                            original_embed.description,
+                        )
+                        if part
+                    ]
+                    if embed_parts:
+                        source_parts.append(" · ".join(embed_parts))
+                content = "\n".join(source_parts) or "*(sem texto)*"
+                if len(content) > 650:
+                    content = content[:647] + "..."
+                attachments = [
+                    f"[{attachment.filename}]({attachment.url[:160]})"
+                    for attachment in message.attachments[:3]
+                ]
+                if attachments:
+                    content += "\n" + " · ".join(attachments)
+                origin = f"**Autor:** {author_text}\n> {content}"
+                if len(origin) > 1024:
+                    origin = origin[:1021] + "..."
+                embed.add_field(
+                    name=f"Origem · mensagem {index}",
+                    value=origin,
+                    inline=False,
+                )
+                embed.set_thumbnail(url=author.display_avatar.url)
+        else:
+            embed.add_field(
+                name="Origem",
+                value="A mensagem não estava no cache; o conteúdo e o autor não estão disponíveis.",
+                inline=False,
+            )
+
+        links = [
+            f"[{message_id}](https://discord.com/channels/"
+            f"{guild.id}/{channel_id}/{message_id})"
+            for message_id in message_ids[:10]
+        ]
+        embed.add_field(
+            name="Links das mensagens",
+            value=" · ".join(links) if links else "Indisponíveis",
+            inline=False,
+        )
+        embed.set_footer(
+            text=(
+                f"IDs dos usuários: {', '.join(dict.fromkeys(author_ids)) or 'indisponíveis'} · "
+                f"ID do servidor: {guild.id} · ID do canal: {channel_id} · "
+                f"IDs das mensagens: {', '.join(map(str, message_ids[:10]))}"
+            )[:2048]
+        )
+
+        try:
+            await log_channel.send(
+                embed=embed,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except (discord.Forbidden, discord.HTTPException) as error:
+            print(
+                f"Não foi possível enviar o registro de mensagem apagada "
+                f"no servidor {guild.id}: {type(error).__name__}: {error}",
+                flush=True,
+            )
 
     @commands.Cog.listener()
     async def on_audit_log_entry_create(
         self, entry: discord.AuditLogEntry
     ) -> None:
+        if entry.action in {
+            discord.AuditLogAction.message_delete,
+            discord.AuditLogAction.message_bulk_delete,
+        }:
+            channel_id = (
+                getattr(getattr(entry.extra, "channel", None), "id", None)
+                if entry.action is discord.AuditLogAction.message_delete
+                else getattr(entry.target, "id", None)
+            )
+            if channel_id is not None:
+                key = (entry.guild.id, channel_id)
+                recent_entries = self.recent_delete_audit_entries.setdefault(
+                    key, []
+                )
+                recent_entries.append((entry, False))
+                expiry = datetime.now(timezone.utc) - timedelta(minutes=1)
+                self.recent_delete_audit_entries[key] = [
+                    (cached_entry, used)
+                    for cached_entry, used in recent_entries
+                    if cached_entry.created_at >= expiry
+                ][-50:]
+            return
+
         guild = entry.guild
         channel_id = self.get_value(guild.id, "audit_log_channel")
         if channel_id is None:
@@ -1781,9 +2033,29 @@ class Menu(commands.Cog):
         )
         embed.add_field(name="Responsável", value=actor_text, inline=False)
         embed.add_field(name="Alvo", value=target_text, inline=False)
+        before = vars(entry.changes.before)
+        after = vars(entry.changes.after)
+        changed_values = []
+        for key in dict.fromkeys((*before, *after)):
+            old_value = before.get(key, "—")
+            new_value = after.get(key, "—")
+            if old_value == new_value:
+                continue
+            changed_values.append(
+                f"**{key.replace('_', ' ').capitalize()}:** "
+                f"`{str(old_value)[:180]}` → `{str(new_value)[:180]}`"
+            )
+        if changed_values:
+            embed.add_field(
+                name="Alterações",
+                value="\n".join(changed_values)[:1024],
+                inline=False,
+            )
         if entry.reason:
             embed.add_field(name="Motivo", value=entry.reason[:1024], inline=False)
-        embed.set_footer(text=f"ID do registro: {entry.id}")
+        embed.set_footer(
+            text=f"Servidor: {guild.id} · Registro: {entry.id}"
+        )
 
         try:
             await channel.send(
