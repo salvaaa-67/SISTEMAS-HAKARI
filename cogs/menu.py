@@ -1908,21 +1908,21 @@ class Menu(commands.Cog):
 
     def overview_embed(self, guild: discord.Guild) -> discord.Embed:
         embed = discord.Embed(
-            title="Oiii...! Eu sou a Larp ♥",
+            title="salve salve meu cria, tudo na paz? vai querer configurar o que pro Hakari hoje?",
             description=(
-                "proteção, automação e comunidade reunidas em um único painel"
+                "encontrou um b.o no bot? chame o [Salvador](https://discord.com/users/1344736884089426022)"
             ),
             color=discord.Color.blurple(),
         )
         embed.add_field(
-            name="Comece pelo essencial",
+            name="Veja algumas sugestões:",
             value=(
-                "1. 🔒 **Proteja**\n"
-                "- anti-nuke, backups e moderação\n"
-                "2. 🧾 **Registre**\n"
-                "- logs de mensagens, cargos, canais e voz\n"
-                "3. 📌 **Organize**\n"
-                "- cargo por perfil, autorole, tickets e rankings"
+                "1. **Instagram**\n"
+                "- configure o Insta no seu servidor!\n"
+                "2. **Avatar Roblox**\n"
+                "- configure o módulo de mostrar avatares Roblox!\n"
+                "3. **E muito mais está por vir...**\n"
+                "- mas você tem que ter paciência hein! **fazer um bot Discord NÃO é fácil.**"
             ),
             inline=False,
         )
@@ -1936,8 +1936,8 @@ class Menu(commands.Cog):
         embed.add_field(
             name="Escolha por onde começar",
             value=(
-                "Só quem usa o comando consegue interagir com este painel — "
-                "o dono consegue liberar usuários utilizando `perm - dar acesso`."
+                "Só você pode usar os elementos neste painel — "
+                "apenas o desenvolvedor ou você que tem acesso ao painel pode conceder acesso clicando em `Gerenciar acessos`."
             ),
             inline=False,
         )
@@ -1945,7 +1945,7 @@ class Menu(commands.Cog):
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
         embed.set_image(url=self.banner_url())
         embed.set_footer(
-            text="Use `ajuda` para abrir o painel de comandos."
+            text="six seven"
         )
         return embed
 
