@@ -145,7 +145,94 @@ SETTINGS = {
             for module, label in MODULES.items()
         },
     },
+    "logs": {
+        "label": "Registros",
+        "description": (
+            "Escolha o canal para receber ações do Registro de Auditoria. "
+            "O bot precisa das permissões Ver registro de auditoria e "
+            "Enviar mensagens/links de incorporação."
+        ),
+        "items": {
+            "audit_log_channel": ("Canal de registros", "channel"),
+        },
+    },
 }
+
+AUDIT_ACTION_LABELS = {
+    "guild_update": "servidor atualizado",
+    "channel_create": "canal criado",
+    "channel_update": "canal atualizado",
+    "channel_delete": "canal excluído",
+    "overwrite_create": "permissão de canal criada",
+    "overwrite_update": "permissão de canal atualizada",
+    "overwrite_delete": "permissão de canal removida",
+    "kick": "membro expulso",
+    "member_prune": "membros removidos por inatividade",
+    "ban": "membro banido",
+    "unban": "banimento removido",
+    "member_update": "membro atualizado",
+    "member_role_update": "cargos de membro atualizados",
+    "member_move": "membro movido de canal de voz",
+    "member_disconnect": "membro desconectado do canal de voz",
+    "bot_add": "bot adicionado",
+    "role_create": "cargo criado",
+    "role_update": "cargo atualizado",
+    "role_delete": "cargo excluído",
+    "invite_create": "convite criado",
+    "invite_update": "convite atualizado",
+    "invite_delete": "convite excluído",
+    "webhook_create": "webhook criado",
+    "webhook_update": "webhook atualizado",
+    "webhook_delete": "webhook excluído",
+    "emoji_create": "emoji criado",
+    "emoji_update": "emoji atualizado",
+    "emoji_delete": "emoji excluído",
+    "message_delete": "mensagem excluída",
+    "message_bulk_delete": "mensagens excluídas em massa",
+    "message_pin": "mensagem fixada",
+    "message_unpin": "mensagem desafixada",
+    "integration_create": "integração criada",
+    "integration_update": "integração atualizada",
+    "integration_delete": "integração removida",
+    "stage_instance_create": "palco criado",
+    "stage_instance_update": "palco atualizado",
+    "stage_instance_delete": "palco encerrado",
+    "sticker_create": "figurinha criada",
+    "sticker_update": "figurinha atualizada",
+    "sticker_delete": "figurinha excluída",
+    "scheduled_event_create": "evento agendado criado",
+    "scheduled_event_update": "evento agendado atualizado",
+    "scheduled_event_delete": "evento agendado excluído",
+    "thread_create": "tópico criado",
+    "thread_update": "tópico atualizado",
+    "thread_delete": "tópico excluído",
+    "app_command_permission_update": "permissões de comandos atualizadas",
+    "soundboard_sound_create": "som do soundboard criado",
+    "soundboard_sound_update": "som do soundboard atualizado",
+    "soundboard_sound_delete": "som do soundboard excluído",
+    "automod_rule_create": "regra de AutoMod criada",
+    "automod_rule_update": "regra de AutoMod atualizada",
+    "automod_rule_delete": "regra de AutoMod excluída",
+    "automod_block_message": "mensagem bloqueada pelo AutoMod",
+    "automod_flag_message": "mensagem sinalizada pelo AutoMod",
+    "automod_timeout_member": "membro silenciado pelo AutoMod",
+    "automod_quarantine_user": "usuário colocado em quarentena pelo AutoMod",
+    "onboarding_prompt_create": "pergunta de integração criada",
+    "onboarding_prompt_update": "pergunta de integração atualizada",
+    "onboarding_prompt_delete": "pergunta de integração excluída",
+    "onboarding_create": "integração do servidor configurada",
+    "onboarding_update": "integração do servidor atualizada",
+    "home_settings_create": "configuração da página inicial criada",
+    "home_settings_update": "configuração da página inicial atualizada",
+}
+
+
+def audit_action_label(action: discord.AuditLogAction) -> str:
+    return AUDIT_ACTION_LABELS.get(
+        action.name,
+        action.name.replace("_", " "),
+    )
+
 
 BOOST_SETTING_DESCRIPTIONS = {
     "booster_role": "Quem tiver este cargo poderá usar os recursos de booster.",
@@ -670,6 +757,7 @@ class ChannelSettingSelect(discord.ui.ChannelSelect):
             "roblox": "Selecione o canal das skins Roblox",
             "ranking_call": "Selecione o canal do ranking de call",
             "ranking_messages": "Selecione o canal do ranking de mensagens",
+            "logs": "Selecione o canal que receberá os registros",
         }.get(view.category, "Selecione o canal deste módulo")
         super().__init__(
             placeholder=placeholder,
@@ -1650,6 +1738,66 @@ class Menu(commands.Cog):
         self.invites: dict[int, str] = {}
         self.pool: asyncpg.Pool | None = None
 
+    @commands.Cog.listener()
+    async def on_audit_log_entry_create(
+        self, entry: discord.AuditLogEntry
+    ) -> None:
+        guild = entry.guild
+        channel_id = self.get_value(guild.id, "audit_log_channel")
+        if channel_id is None:
+            return
+
+        channel = guild.get_channel(int(channel_id))
+        if channel is None or not hasattr(channel, "send"):
+            print(
+                f"Canal de registros {channel_id} não encontrado "
+                f"no servidor {guild.id}.",
+                flush=True,
+            )
+            return
+
+        action_label = audit_action_label(entry.action)
+        actor = entry.user
+        target = entry.target
+        actor_text = (
+            f"{actor.mention} (`{actor}` · `{actor.id}`)"
+            if actor is not None
+            else "Discord ou integração (responsável indisponível)"
+        )
+        target_text = (
+            f"{target.mention} (`{target}` · `{target.id}`)"
+            if isinstance(target, (discord.Member, discord.User, discord.Role))
+            else (
+                f"`{target}` (ID `{target.id}`)"
+                if target is not None and hasattr(target, "id")
+                else "Não informado pelo Discord"
+            )
+        )
+
+        embed = discord.Embed(
+            title=f"Registro de auditoria · {action_label}",
+            color=discord.Color.blurple(),
+            timestamp=entry.created_at,
+        )
+        embed.add_field(name="Responsável", value=actor_text, inline=False)
+        embed.add_field(name="Alvo", value=target_text, inline=False)
+        if entry.reason:
+            embed.add_field(name="Motivo", value=entry.reason[:1024], inline=False)
+        embed.set_footer(text=f"ID do registro: {entry.id}")
+
+        try:
+            await channel.send(
+                embed=embed,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except (discord.Forbidden, discord.HTTPException) as error:
+            print(
+                f"Não foi possível enviar o registro de auditoria "
+                f"{entry.id} no servidor {guild.id}: "
+                f"{type(error).__name__}: {error}",
+                flush=True,
+            )
+
     async def cog_load(self) -> None:
         if CONFIG_PATH.exists():
             try:
@@ -2067,9 +2215,7 @@ class Menu(commands.Cog):
                 )
             await self.reset_guild_config(target_guild_id)
             self.invites.pop(target_guild_id, None)
-            await guild.leave(
-                reason="Saída solicitada pelo desenvolvedor pela Área Restrita"
-            )
+            await guild.leave()
             return (
                 f"O bot saiu de **{guild.name}** (`{target_guild_id}`); "
                 "as configurações do `/menu`, permissões de acesso e imagens "
