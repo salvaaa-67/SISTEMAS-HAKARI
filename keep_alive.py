@@ -166,7 +166,7 @@ def home():
       pointer-events: none;
     }
 
-    .hero-copy, .hero-mark { position: relative; z-index: 1; }
+    .hero-copy, .hero-avatar { position: relative; z-index: 1; }
     .eyebrow { color: #aab9dd; font-size: .72rem; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; }
 
     h1 {
@@ -178,19 +178,15 @@ def home():
 
     .hero p { max-width: 600px; margin: 0; color: #d1d9e9; font-size: .98rem; line-height: 1.75; }
 
-    .hero-mark {
-      display: grid;
+    .hero-avatar {
+      display: block;
       width: 190px;
       height: 190px;
-      place-items: center;
       justify-self: center;
+      object-fit: cover;
       border: 1px solid rgba(255, 255, 255, .2);
       border-radius: 50%;
-      background: rgba(255, 255, 255, .055);
-      color: #dbe5ff;
-      font-size: 4rem;
-      font-weight: 800;
-      letter-spacing: -.1em;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, .24);
     }
 
     .section-heading {
@@ -258,7 +254,7 @@ def home():
     @media (max-width: 760px) {
       body { padding: 22px 15px; }
       .hero { grid-template-columns: 1fr; min-height: 0; padding: 34px 28px; }
-      .hero-mark { display: none; }
+      .hero-avatar { display: none; }
       .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .details { grid-template-columns: 1fr; }
       .section-heading { align-items: start; flex-direction: column; }
@@ -302,7 +298,13 @@ def home():
           <h1 id="hero-title">HAKARI</h1>
           <p>Moderação, utilidades, automação e entretenimento em um só lugar. Criado em Python e conhecido pelo famoso comando <strong>/tomate</strong>.</p>
         </div>
-        <div class="hero-mark" aria-hidden="true">H</div>
+        <img
+          class="hero-avatar"
+          src="https://i.postimg.cc/ncHYNPsF/4f1589b0a2549afad241ab8cc78b5828.jpg"
+          alt="Avatar do bot HAKARI"
+          width="190"
+          height="190"
+        />
       </section>
 
       <section aria-labelledby="status-heading">
