@@ -201,11 +201,9 @@ class Utilities(commands.Cog):
         latency = round(self.bot.latency * 1000)
 
         embed = discord.Embed(
-            title="🏓 pong!",
+            title="🏓 PONG PORRA!",
             description=(
-                f"latência da API: **{latency} milissegundos**\n"
-                "informações de hospedagem e monitoramento 24/7 estão no meu "
-                "[__***site de monitoramento***__](https://hakari-voltou.onrender.com)"
+                f"eu respondo seus comandos em até: **{latency} milissegundos**!"
             ),
             color=(
                 discord.Color.green()
@@ -227,10 +225,9 @@ class Utilities(commands.Cog):
         latency = round(self.bot.latency * 1000)
 
         embed = discord.Embed(
-            title="🏓 pong!",
+            title="🏓 PONG PORRA!",
             description=(
-                f"latência da API: **{latency} milissegundos** | "
-                f"ligado 24/7 com **Render** e **UptimeRobot**"
+                f"eu respondo seus comandos em até: **{latency} milissegundos**!"
             ),
             color=(
                 discord.Color.green()
