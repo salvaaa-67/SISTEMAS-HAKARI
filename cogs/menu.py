@@ -1978,7 +1978,7 @@ class Menu(commands.Cog):
             channel_id = (
                 getattr(getattr(entry.extra, "channel", None), "id", None)
                 if entry.action is discord.AuditLogAction.message_delete
-                else getattr(entry.target, "id", None)
+                else getattr(self._get_audit_entry_target(entry), "id", None)
             )
             if channel_id is not None:
                 key = (entry.guild.id, channel_id)
@@ -2010,7 +2010,7 @@ class Menu(commands.Cog):
 
         action_label = audit_action_label(entry.action)
         actor = entry.user
-        target = entry.target
+        target = self._get_audit_entry_target(entry)
         actor_text = (
             f"{actor.mention} (`{actor}` · `{actor.id}`)"
             if actor is not None
@@ -2069,6 +2069,19 @@ class Menu(commands.Cog):
                 f"{type(error).__name__}: {error}",
                 flush=True,
             )
+
+    def _get_audit_entry_target(
+        self, entry: discord.AuditLogEntry
+    ) -> object | None:
+        try:
+            return entry.target
+        except TypeError as error:
+            print(
+                f"Registro de auditoria {entry.id} no servidor {entry.guild.id} "
+                f"com alvo inválido ({entry.action}): {type(error).__name__}: {error}",
+                flush=True,
+            )
+            return None
 
     async def cog_load(self) -> None:
         if CONFIG_PATH.exists():

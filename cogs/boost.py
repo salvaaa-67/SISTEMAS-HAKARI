@@ -19,26 +19,35 @@ MANAGED_ROLE_PREFIXES = ("família -", "cargo -")
 
 
 class RoleEditModal(discord.ui.Modal):
-    def __init__(self, cog, owner_id: int, role_id: int, family: bool):
+    def __init__(
+        self,
+        cog,
+        owner_id: int,
+        role_id: int,
+        family: bool,
+        guild: discord.Guild,
+    ):
         self.cog = cog
         self.owner_id = owner_id
         self.role_id = role_id
         self.family = family
+        self.has_gradient_colors = cog.has_gradient_colors(guild)
         role_name = "Editar cargo da família" if family else "Editar seu cargo"
         super().__init__(
             title=role_name,
             custom_id=f"boost:edit:{owner_id}:{role_id}",
         )
 
-        guild = cog.bot.get_guild(cog.guild_id_for_role(role_id))
-        current_role = guild.get_role(role_id) if guild else None
+        current_role = guild.get_role(role_id)
         current_name = current_role.name if current_role else ""
         current_color = (
             f"#{current_role.color.value:06X}" if current_role else "#000000"
         )
         current_secondary_color = (
             f"#{current_role.secondary_color.value:06X}"
-            if current_role and current_role.secondary_color
+            if current_role
+            and current_role.secondary_color
+            and self.has_gradient_colors
             else current_color
         )
 
@@ -50,24 +59,30 @@ class RoleEditModal(discord.ui.Modal):
             required=True,
         )
         self.primary_color_input = discord.ui.TextInput(
-            label="Primeira cor do gradiente",
+            label=(
+                "Primeira cor do gradiente"
+                if self.has_gradient_colors
+                else "Cor do cargo"
+            ),
             placeholder="#000000 ou 000000",
             default=current_color,
             min_length=6,
             max_length=7,
             required=True,
         )
-        self.secondary_color_input = discord.ui.TextInput(
-            label="Segunda cor do gradiente",
-            placeholder="#FFFFFF ou FFFFFF",
-            default=current_secondary_color,
-            min_length=6,
-            max_length=7,
-            required=True,
-        )
+        self.secondary_color_input: discord.ui.TextInput | None = None
         self.add_item(self.name_input)
         self.add_item(self.primary_color_input)
-        self.add_item(self.secondary_color_input)
+        if self.has_gradient_colors:
+            self.secondary_color_input = discord.ui.TextInput(
+                label="Segunda cor do gradiente",
+                placeholder="#FFFFFF ou FFFFFF",
+                default=current_secondary_color,
+                min_length=6,
+                max_length=7,
+                required=True,
+            )
+            self.add_item(self.secondary_color_input)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.owner_id:
@@ -83,17 +98,31 @@ class RoleEditModal(discord.ui.Modal):
             return await interaction.response.send_message(
                 "<:wrong:1554659471223947324> Você não tem mais permissão para editar este cargo.", ephemeral=True
             )
+        guild = interaction.guild
+        if guild is None:
+            return await interaction.response.send_message(
+                "<:wrong:1554659471223947324> Este formulário só pode ser usado no servidor.",
+                ephemeral=True,
+            )
 
-        color_texts = (
-            self.primary_color_input.value.strip(),
-            self.secondary_color_input.value.strip(),
-        )
+        color_texts = [self.primary_color_input.value.strip()]
+        if self.secondary_color_input is not None:
+            color_texts.append(self.secondary_color_input.value.strip())
         if any(
             not re.fullmatch(r"#?[0-9a-fA-F]{6}", color_text)
             for color_text in color_texts
         ):
+            if self.has_gradient_colors:
+                color_error = (
+                    "Informe duas cores hexadecimais válidas, como "
+                    "`000000` e `#FFFFFF`."
+                )
+            else:
+                color_error = (
+                    "Informe uma cor hexadecimal válida, como `000000`."
+                )
             return await interaction.response.send_message(
-                "<:wrong:1554659471223947324> Informe duas cores hexadecimais válidas, como `000000` e `#FFFFFF`.",
+                f"<:wrong:1554659471223947324> {color_error}",
                 ephemeral=True,
             )
         role_name = self.name_input.value.strip()
@@ -102,27 +131,67 @@ class RoleEditModal(discord.ui.Modal):
                 "<:wrong:1554659471223947324> O nome do cargo não pode ficar vazio.", ephemeral=True
             )
 
-        role = interaction.guild.get_role(self.role_id)
+        role = guild.get_role(self.role_id)
         if role is None:
             return await interaction.response.send_message(
                 "<:wrong:1554659471223947324> Não encontrei esse cargo no servidor.", ephemeral=True
             )
 
-        try:
-            role = await role.edit(
-                name=role_name,
-                color=discord.Color(
-                    int(color_texts[0].removeprefix("#"), 16)
-                ),
-                secondary_color=discord.Color(
-                    int(color_texts[1].removeprefix("#"), 16)
-                ),
-                tertiary_color=None,
-                reason=f"Personalização solicitada por {interaction.user}",
-            )
-        except discord.Forbidden:
+        bot_member = guild.me
+        if bot_member is None or not bot_member.guild_permissions.manage_roles:
             return await interaction.response.send_message(
-                "<:wrong:1554659471223947324> Não tenho permissão para editar esse cargo.", ephemeral=True
+                "<:wrong:1554659471223947324> Preciso da permissão **Gerenciar cargos** para editar este cargo.",
+                ephemeral=True,
+            )
+        if role.managed:
+            return await interaction.response.send_message(
+                "<:wrong:1554659471223947324> Este cargo é gerenciado pelo Discord ou por uma integração e não pode ser editado pelo bot.",
+                ephemeral=True,
+            )
+        if role >= bot_member.top_role:
+            return await interaction.response.send_message(
+                "<:wrong:1554659471223947324> O cargo mais alto do bot precisa ficar acima do cargo personalizado.",
+                ephemeral=True,
+            )
+
+        primary_color = discord.Color(int(color_texts[0].removeprefix("#"), 16))
+        reason = f"Personalização solicitada por {interaction.user}"
+        try:
+            if (
+                self.secondary_color_input is not None
+                and self.cog.has_gradient_colors(guild)
+            ):
+                role = await role.edit(
+                    name=role_name,
+                    color=primary_color,
+                    secondary_color=discord.Color(
+                        int(
+                            self.secondary_color_input.value.strip().removeprefix("#"),
+                            16,
+                        )
+                    ),
+                    tertiary_color=None,
+                    reason=reason,
+                )
+            else:
+                role = await role.edit(
+                    name=role_name,
+                    color=primary_color,
+                    reason=reason,
+                )
+        except discord.Forbidden as error:
+            print(
+                f"Discord negou a edição do cargo {role.id} no servidor "
+                f"{guild.id}; bot_top_role={bot_member.top_role.id}, "
+                f"manage_roles={bot_member.guild_permissions.manage_roles}, "
+                f"code={error.code}: {error}",
+                flush=True,
+            )
+            return await interaction.response.send_message(
+                "<:wrong:1554659471223947324> O Discord negou a edição do cargo. "
+                "Verifique a permissão **Gerenciar cargos**, a posição do cargo do bot "
+                "e se o cargo personalizado não é gerenciado.",
+                ephemeral=True,
             )
         except discord.HTTPException:
             return await interaction.response.send_message(
@@ -299,10 +368,14 @@ class Boost(commands.Cog):
 
         for key in self.families:
             guild_id, owner_id = map(int, key.split(":"))
-            self.bot.add_view(self.family_view(guild_id, owner_id))
+            self.bot.add_view(
+                self.family_view(guild_id, owner_id, include_icon=True)
+            )
         for key in self.personal_roles:
             guild_id, owner_id = map(int, key.split(":"))
-            self.bot.add_view(self.personal_view(guild_id, owner_id))
+            self.bot.add_view(
+                self.personal_view(guild_id, owner_id, include_icon=True)
+            )
 
     async def cog_unload(self) -> None:
         if self.pool is not None:
@@ -420,6 +493,12 @@ class Boost(commands.Cog):
     def setting(self, guild_id: int, key: str, default=None):
         menu = self.bot.get_cog("Menu")
         return menu.get_value(guild_id, key, default) if menu else default
+
+    def has_gradient_colors(self, guild: discord.Guild) -> bool:
+        return guild.premium_tier >= 2
+
+    def has_role_icons(self, guild: discord.Guild | None) -> bool:
+        return guild is not None and guild.premium_tier >= 2
 
     def configured_role_id(self, guild: discord.Guild, key: str):
         value = self.setting(guild.id, key)
@@ -789,15 +868,25 @@ class Boost(commands.Cog):
             raise
         return role
 
-    def family_view(self, guild_id: int, owner_id: int) -> ComponentsV2View:
+    def family_view(
+        self,
+        guild_id: int,
+        owner_id: int,
+        *,
+        include_icon: bool | None = None,
+    ) -> ComponentsV2View:
         view = ComponentsV2View(timeout=None)
-        buttons = (
+        buttons = [
             ("Editar cargo", discord.ButtonStyle.primary, "edit"),
-            ("Editar ícone", discord.ButtonStyle.secondary, "icon"),
             ("Criar call", discord.ButtonStyle.success, "voice"),
             ("Adicionar membros", discord.ButtonStyle.secondary, "add"),
             ("Remover membros", discord.ButtonStyle.secondary, "remove"),
-        )
+        ]
+        guild = self.bot.get_guild(guild_id)
+        if include_icon is None:
+            include_icon = guild is None or self.has_role_icons(guild)
+        if include_icon:
+            buttons.insert(1, ("Editar ícone", discord.ButtonStyle.secondary, "icon"))
         for label, style, action in buttons:
             button = discord.ui.Button(
                 label=label,
@@ -808,7 +897,13 @@ class Boost(commands.Cog):
             view.add_item(button)
         return view
 
-    def personal_view(self, guild_id: int, owner_id: int) -> ComponentsV2View:
+    def personal_view(
+        self,
+        guild_id: int,
+        owner_id: int,
+        *,
+        include_icon: bool | None = None,
+    ) -> ComponentsV2View:
         view = ComponentsV2View(timeout=None)
         button = discord.ui.Button(
             label="Editar cargo",
@@ -817,13 +912,17 @@ class Boost(commands.Cog):
         )
         button.callback = self._personal_edit_callback(guild_id, owner_id)
         view.add_item(button)
-        icon_button = discord.ui.Button(
-            label="Editar ícone",
-            style=discord.ButtonStyle.secondary,
-            custom_id=f"boost:personal:icon:{guild_id}:{owner_id}",
-        )
-        icon_button.callback = self._personal_icon_callback(guild_id, owner_id)
-        view.add_item(icon_button)
+        guild = self.bot.get_guild(guild_id)
+        if include_icon is None:
+            include_icon = guild is None or self.has_role_icons(guild)
+        if include_icon:
+            icon_button = discord.ui.Button(
+                label="Editar ícone",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"boost:personal:icon:{guild_id}:{owner_id}",
+            )
+            icon_button.callback = self._personal_icon_callback(guild_id, owner_id)
+            view.add_item(icon_button)
         return view
 
     async def emoji_to_png(self, emoji_text: str) -> bytes:
@@ -879,6 +978,12 @@ class Boost(commands.Cog):
         role: discord.Role,
         family: bool,
     ) -> None:
+        if not self.has_role_icons(interaction.guild):
+            return await interaction.response.send_message(
+                "<:wrong:1554659471223947324> Ícones de cargo estão disponíveis a partir do Nível 2 de Boost do servidor.",
+                ephemeral=True,
+            )
+
         if self.pool is None:
             return await interaction.response.send_message(
                 "<:wrong:1554659471223947324> Não consegui conectar ao NeonDB para registrar o emoji.",
@@ -941,6 +1046,14 @@ class Boost(commands.Cog):
                 self.family_access_message(message.author)
                 if pending["family"]
                 else "<:wrong:1554659471223947324> Você não tem mais permissão para editar o cargo pessoal.",
+            )
+            return
+
+        if not self.has_role_icons(message.guild):
+            self.pending_icon_edits.pop(key, None)
+            await self.send_icon_feedback(
+                pending,
+                "<:wrong:1554659471223947324> Ícones de cargo estão disponíveis a partir do Nível 2 de Boost do servidor.",
             )
             return
 
@@ -1048,9 +1161,16 @@ class Boost(commands.Cog):
 
             if action == "edit":
                 return await interaction.response.send_modal(
-                    RoleEditModal(self, owner_id, role.id, family=True)
+                    RoleEditModal(
+                        self, owner_id, role.id, family=True, guild=interaction.guild
+                    )
                 )
             if action == "icon":
+                if not self.has_role_icons(interaction.guild):
+                    return await interaction.response.send_message(
+                        "<:wrong:1554659471223947324> Ícones de cargo estão disponíveis a partir do Nível 2 de Boost do servidor.",
+                        ephemeral=True,
+                    )
                 return await self.start_icon_edit(interaction, role, family=True)
             if action in {"add", "remove"}:
                 select_view = discord.ui.View(timeout=180)
@@ -1156,7 +1276,9 @@ class Boost(commands.Cog):
                     ephemeral=True,
                 )
             await interaction.response.send_modal(
-                RoleEditModal(self, owner_id, role.id, family=False)
+                RoleEditModal(
+                    self, owner_id, role.id, family=False, guild=interaction.guild
+                )
             )
 
         return callback
@@ -1174,6 +1296,11 @@ class Boost(commands.Cog):
             if interaction.guild_id != guild_id:
                 return await interaction.response.send_message(
                     "<:wrong:1554659471223947324> Esse painel não pertence a este servidor.", ephemeral=True
+                )
+            if not self.has_role_icons(interaction.guild):
+                return await interaction.response.send_message(
+                    "<:wrong:1554659471223947324> Ícones de cargo estão disponíveis a partir do Nível 2 de Boost do servidor.",
+                    ephemeral=True,
                 )
             role_id = self.personal_roles.get(self.key(guild_id, owner_id))
             role = interaction.guild.get_role(role_id) if role_id else None
