@@ -14,11 +14,15 @@ from discord.ext import commands
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 FISH_API_URL = "https://api.fish.audio"
-GROQ_MODEL = "llama3-70b-8192"
+GROQ_MODEL = "openai/gpt-oss-20b"
 FISH_TTS_MODEL = "s2.1-pro-free"
 MAX_RESPONSE_WORDS = 40
 MAX_AUDIO_SECONDS = 29
 FFMPEG_EXECUTABLE = imageio_ffmpeg.get_ffmpeg_exe()
+
+
+class FishVoiceNotFoundError(RuntimeError):
+    pass
 
 
 class MentionAudio(commands.Cog):
@@ -43,6 +47,16 @@ class MentionAudio(commands.Cog):
         async with request as response:
             if response.status >= 400:
                 details = (await response.text())[:500]
+                if (
+                    response.status == 404
+                    and url == GROQ_API_URL
+                    and json_body is not None
+                ):
+                    raise RuntimeError(
+                        "A Groq não encontrou o modelo "
+                        f"`{json_body.get('model', 'desconhecido')}` "
+                        f"(HTTP 404): {details}"
+                    )
                 raise RuntimeError(
                     f"API retornou HTTP {response.status}: {details}"
                 )
@@ -117,6 +131,13 @@ class MentionAudio(commands.Cog):
             },
             json=payload,
         ) as response:
+            if response.status == 404:
+                details = (await response.text())[:500]
+                raise FishVoiceNotFoundError(
+                    "Fish Audio não encontrou a voz selecionada "
+                    f"(reference_id={voice_id}). Reabra /menu e selecione "
+                    f"uma voz disponível. Detalhes: {details}"
+                )
             if response.status >= 400:
                 details = (await response.text())[:500]
                 raise RuntimeError(
@@ -189,10 +210,10 @@ class MentionAudio(commands.Cog):
         voice_id = menu.ai_audio_voice_id(message.guild.id)
         if voice_id is None:
             return
-        
+
         groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
         fish_api_key = os.getenv("FISH_API_KEY", "").strip()
-        
+
         if not groq_api_key or not fish_api_key:
             await message.reply(
                 "Para responder em áudio, configure `GROQ_API_KEY` e "
@@ -227,6 +248,27 @@ class MentionAudio(commands.Cog):
                     BytesIO(bounded_audio),
                     filename="resposta-hakari.mp3",
                 ),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except FishVoiceNotFoundError as error:
+            print(
+                f"Voz Fish Audio inválida (guild={message.guild.id}, "
+                f"user={message.author.id}): {error}",
+                flush=True,
+            )
+            await menu.set_values(
+                message.guild.id,
+                {
+                    "ia_audio_voice_id": None,
+                    "ia_audio_voice_name": None,
+                    "module_ia_audio": False,
+                },
+            )
+            await message.reply(
+                "A voz configurada não está mais disponível no Fish Audio. "
+                "Desativei a IA em áudio neste servidor; abra `/menu` → "
+                "**IA em áudio** para escolher uma voz disponível e reativar.",
+                mention_author=False,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
         except (

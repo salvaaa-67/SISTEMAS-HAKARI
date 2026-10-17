@@ -32,7 +32,8 @@ FISH_PUBLIC_VOICE_SPECS = (
     {
         "key": "hakari",
         "label": "Hakari (Jujutsu Kaisen) [Padrão]",
-        "id": "5baee412f62d4bd89a0246d3124a97d8",  
+        "id": "5baee412f62d4bd89a0246d3124a97d8",
+        "queries": ("Hakari",),
         "match_terms": ("hakari",),
         "default": True,
     },
@@ -2503,63 +2504,88 @@ class Menu(commands.Cog):
 
         timeout = aiohttp.ClientTimeout(total=60, connect=10)
         available_voices = []
-
         async with aiohttp.ClientSession(timeout=timeout) as session:
             for voice_spec in FISH_PUBLIC_VOICE_SPECS:
-                # Se o ID já estiver fixado na lista, usa ele diretamente
-                if voice_spec.get("id"):
-                    available_voices.append(
-                        {
-                            "id": voice_spec["id"],
-                            "label": voice_spec["label"],
-                            "default": voice_spec.get("default", False),
-                        }
-                    )
-                    continue
-
                 matching_model = None
-                for query in voice_spec["queries"]:
+                if voice_spec.get("id"):
                     async with session.get(
-                        "https://api.fish.audio/model",
+                        f"https://api.fish.audio/model/{voice_spec['id']}",
                         headers={"Authorization": f"Bearer {api_key}"},
-                        params={
-                            "title": query,
-                            "page_size": "50",
-                            "sort_by": "score",
-                        },
                     ) as response:
-                        if response.status >= 400:
+                        if response.status == 200:
+                            model = await response.json()
+                            if (
+                                isinstance(model, dict)
+                                and model.get("state") == "trained"
+                                and model.get("type") == "tts"
+                                and model.get("visibility") == "public"
+                                and isinstance(model.get("_id"), str)
+                            ):
+                                matching_model = model
+                        elif response.status != 404:
+                            details = (await response.text())[:300]
+                            raise RuntimeError(
+                                "Fish Audio retornou HTTP "
+                                f"{response.status} ao validar "
+                                f"{voice_spec['label']}: {details}"
+                            )
+                        else:
                             print(
-                                f"Fish Audio HTTP {response.status} ao buscar {voice_spec['label']}",
+                                "Fish Audio não encontrou o ID fixado para "
+                                f"{voice_spec['label']}; buscando pelo nome.",
                                 flush=True,
                             )
-                            continue
-                        data = await response.json()
 
-                    if not isinstance(data, dict) or not isinstance(
-                        data.get("items"), list
-                    ):
-                        continue
+                if matching_model is None:
+                    for query in voice_spec.get("queries", ()):
+                        async with session.get(
+                            "https://api.fish.audio/model",
+                            headers={"Authorization": f"Bearer {api_key}"},
+                            params={
+                                "self": "false",
+                                "title": query,
+                                "page_size": "50",
+                                "sort_by": "score",
+                            },
+                        ) as response:
+                            if response.status == 404:
+                                continue
+                            if response.status >= 400:
+                                details = (await response.text())[:300]
+                                raise RuntimeError(
+                                    "Fish Audio retornou HTTP "
+                                    f"{response.status} ao buscar "
+                                    f"{voice_spec['label']}: {details}"
+                                )
+                            data = await response.json()
 
-                    # Filtro flexibilizado (removido o filtro de licensed=True)
-                    matching_model = next(
-                        (
-                            model
-                            for model in data["items"]
-                            if isinstance(model, dict)
-                            and model.get("state") == "trained"
-                            and model.get("type") == "tts"
-                            and isinstance(model.get("_id"), str)
-                            and any(
-                                term.casefold()
-                                in (model.get("title") or "").casefold()
-                                for term in voice_spec["match_terms"]
+                        if not isinstance(data, dict) or not isinstance(
+                            data.get("items"), list
+                        ):
+                            raise ValueError(
+                                "A busca Fish Audio retornou um formato "
+                                f"inválido para {voice_spec['label']}."
                             )
-                        ),
-                        None,
-                    )
-                    if matching_model is not None:
-                        break
+
+                        matching_model = next(
+                            (
+                                model
+                                for model in data["items"]
+                                if isinstance(model, dict)
+                                and model.get("state") == "trained"
+                                and model.get("type") == "tts"
+                                and model.get("visibility") == "public"
+                                and isinstance(model.get("_id"), str)
+                                and any(
+                                    term.casefold()
+                                    in (model.get("title") or "").casefold()
+                                    for term in voice_spec["match_terms"]
+                                )
+                            ),
+                            None,
+                        )
+                        if matching_model is not None:
+                            break
 
                 if matching_model is None:
                     print(
