@@ -89,18 +89,29 @@ class MentionAudio(commands.Cog):
                     },
                     {"role": "user", "content": prompt[:2000]},
                 ],
-                "max_tokens": 110,
+                "max_completion_tokens": 512,
+                "reasoning_effort": "low",
+                "include_reasoning": False,
                 "temperature": 0.7,
             },
         )
         try:
-            text = data["choices"][0]["message"]["content"].strip()
+            choice = data["choices"][0]
+            message = choice["message"]
+            text = message["content"]
+            if not isinstance(text, str):
+                raise TypeError("O conteúdo da resposta não é texto.")
+            text = text.strip()
         except (KeyError, IndexError, TypeError, AttributeError) as error:
             raise ValueError("A resposta do Groq veio em formato inválido.") from error
 
         words = text.split()
         if not words:
-            raise ValueError("O Groq retornou uma resposta vazia.")
+            finish_reason = choice.get("finish_reason", "desconhecido")
+            raise ValueError(
+                "O Groq não retornou texto final "
+                f"(finish_reason={finish_reason})."
+            )
         return " ".join(words[:MAX_RESPONSE_WORDS])
 
     async def _generate_audio(
