@@ -30,57 +30,65 @@ MAX_AI_AUDIO_VOICES = 15
 
 FISH_PUBLIC_VOICE_SPECS = (
     {
+        "key": "hakari",
+        "label": "Hakari (Jujutsu Kaisen) [Padrão]",
+        "id": "5baee412f62d4bd89a0246d3124a97d8",  
+        "match_terms": ("hakari",),
+        "default": True,
+    },
+    {
         "key": "neymar",
         "label": "Neymar (Jogador de futebol)",
+        "id": "2bd0cd1a49474aeab129894f4512e8a6",
         "queries": ("Neymar",),
         "match_terms": ("neymar",),
     },
     {
         "key": "sukuna",
         "label": "Sukuna (Jujutsu Kaisen)",
+        "id": "3a164c7d00b2437682042ebd01755521",
         "queries": ("Sukuna",),
         "match_terms": ("sukuna",),
     },
     {
-        "key": "hakari",
-        "label": "Hakari (Jujutsu Kaisen) [Padrão]",
-        "queries": ("Hakari",),
-        "match_terms": ("hakari",),
-        "default": True,
-    },
-    {
         "key": "satoru_gojo",
         "label": "Gojo (Jujutsu Kaisen)",
-        "queries": ("Satoru Gojo", "Gojo Satoru", "Gojo"),
+        "id": "96a2c896ed7846848cdd83e484b23eb3",
+        "queries": ("Gojo", "Satoru Gojo"),
         "match_terms": ("gojo",),
     },
     {
         "key": "verity",
-        "label": "Verity (Personagem de um mod do Minecraft)",
+        "label": "Verity (Minecraft Mod)",
+        "id": "8d21b053e2804e2a890e1cf62f267b6f",
         "queries": ("Verity",),
         "match_terms": ("verity",),
     },
     {
         "key": "luffy",
-        "label": "Luffy (Personagem de One Piece)",
+        "label": "Luffy (One Piece)",
+        "id": "dbe7bddfe9c04a72a4fd566206099ae4",
         "queries": ("Luffy",),
         "match_terms": ("luffy",),
     },
     {
         "key": "zoro",
-        "label": "Zoro (Personagem de One Piece)",
+        "label": "Zoro (One Piece)",
+        "id": "17ad4763428044f99c1ae7d1743294dd",
         "queries": ("Zoro",),
         "match_terms": ("zoro",),
     },
     {
         "key": "patrick_jane",
-        "label": "Patrick Jane (Protagonista de The Mentalist)",
-        "queries": ("Patrick Jane", "Patrick",),
-        "match_terms": ("patrick", "jane"),
+        "label": "Patrick Jane (The Mentalist)",
+        "id": "1a975db6f1be40f4bed2bcc5e495301d",
+        "queries": ("Patrick Jane", "Patrick"),
+        "match_terms": ("patrick",),
     },
     {
         "key": "darth_vader",
-        "label": "Darth Vader (Personagem de Star Wars)",
+        "label": "Darth Vader (Star Wars)",
+        "id": "ecbaa33bef134b0580fa2d438202aeae",
         "queries": ("Darth Vader", "Vader"),
         "match_terms": ("vader",),
     },
@@ -2495,36 +2503,45 @@ class Menu(commands.Cog):
 
         timeout = aiohttp.ClientTimeout(total=60, connect=10)
         available_voices = []
+
         async with aiohttp.ClientSession(timeout=timeout) as session:
             for voice_spec in FISH_PUBLIC_VOICE_SPECS:
+                # Se o ID já estiver fixado na lista, usa ele diretamente
+                if voice_spec.get("id"):
+                    available_voices.append(
+                        {
+                            "id": voice_spec["id"],
+                            "label": voice_spec["label"],
+                            "default": voice_spec.get("default", False),
+                        }
+                    )
+                    continue
+
                 matching_model = None
                 for query in voice_spec["queries"]:
                     async with session.get(
                         "https://api.fish.audio/model",
                         headers={"Authorization": f"Bearer {api_key}"},
                         params={
-                            "self": "false",
-                            "licensed": "true",
                             "title": query,
-                            "page_size": "100",
+                            "page_size": "50",
                             "sort_by": "score",
                         },
                     ) as response:
                         if response.status >= 400:
-                            raise RuntimeError(
-                                "Fish Audio retornou HTTP "
-                                f"{response.status} ao buscar {voice_spec['label']}."
+                            print(
+                                f"Fish Audio HTTP {response.status} ao buscar {voice_spec['label']}",
+                                flush=True,
                             )
+                            continue
                         data = await response.json()
 
                     if not isinstance(data, dict) or not isinstance(
                         data.get("items"), list
                     ):
-                        raise ValueError(
-                            "A busca Fish Audio retornou um formato inválido "
-                            f"para {voice_spec['label']}."
-                        )
+                        continue
 
+                    # Filtro flexibilizado (removido o filtro de licensed=True)
                     matching_model = next(
                         (
                             model
@@ -2532,10 +2549,8 @@ class Menu(commands.Cog):
                             if isinstance(model, dict)
                             and model.get("state") == "trained"
                             and model.get("type") == "tts"
-                            and model.get("visibility") == "public"
-                            and model.get("licensed") is True
                             and isinstance(model.get("_id"), str)
-                            and all(
+                            and any(
                                 term.casefold()
                                 in (model.get("title") or "").casefold()
                                 for term in voice_spec["match_terms"]
