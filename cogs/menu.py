@@ -27,18 +27,13 @@ from .quotes import (
 DEVELOPER_ID = 1344736884089426022
 RANKING_INTRO_DESCRIPTION_MAX_LENGTH = 1500
 MAX_AI_AUDIO_VOICES = 15
+
 FISH_PUBLIC_VOICE_SPECS = (
     {
         "key": "neymar",
-        "label": "Neymar",
+        "label": "Neymar (Jogador de futebol)",
         "queries": ("Neymar",),
         "match_terms": ("neymar",),
-    },
-    {
-        "key": "verity",
-        "label": "Verity (Minecraft)",
-        "queries": ("Verity",),
-        "match_terms": ("verity",),
     },
     {
         "key": "sukuna",
@@ -47,43 +42,50 @@ FISH_PUBLIC_VOICE_SPECS = (
         "match_terms": ("sukuna",),
     },
     {
+        "key": "hakari",
+        "label": "Hakari (Jujutsu Kaisen) [Padrão]",
+        "queries": ("Hakari",),
+        "match_terms": ("hakari",),
+        "default": True,
+    },
+    {
+        "key": "satoru_gojo",
+        "label": "Gojo (Jujutsu Kaisen)",
+        "queries": ("Satoru Gojo", "Gojo Satoru", "Gojo"),
+        "match_terms": ("gojo",),
+    },
+    {
+        "key": "verity",
+        "label": "Verity (Personagem de um mod do Minecraft)",
+        "queries": ("Verity",),
+        "match_terms": ("verity",),
+    },
+    {
         "key": "luffy",
-        "label": "Luffy (One Piece)",
+        "label": "Luffy (Personagem de One Piece)",
         "queries": ("Luffy",),
         "match_terms": ("luffy",),
     },
     {
         "key": "zoro",
-        "label": "Zoro (One Piece)",
+        "label": "Zoro (Personagem de One Piece)",
         "queries": ("Zoro",),
         "match_terms": ("zoro",),
     },
     {
         "key": "patrick_jane",
-        "label": "Patrick Jane (The Mentalist)",
+        "label": "Patrick Jane (Protagonista de The Mentalist)",
         "queries": ("Patrick Jane", "Patrick",),
         "match_terms": ("patrick", "jane"),
     },
     {
         "key": "darth_vader",
-        "label": "Darth Vader (Star Wars)",
+        "label": "Darth Vader (Personagem de Star Wars)",
         "queries": ("Darth Vader", "Vader"),
         "match_terms": ("vader",),
     },
-    {
-        "key": "satoru_gojo",
-        "label": "Satoru Gojo (Jujutsu Kaisen)",
-        "queries": ("Satoru Gojo", "Gojo Satoru", "Gojo"),
-        "match_terms": ("gojo",),
-    },
-    {
-        "key": "hakari",
-        "label": "Hakari (padrão)",
-        "queries": ("Hakari",),
-        "match_terms": ("hakari",),
-        "default": True,
-    },
 )
+
 FALLBACK_MENU_BANNER = "https://i.postimg.cc/kgv8f49w/banner-hakari-bot.png"
 MENU_WEBSITE_URL = "https://sistemas-hakari-igw0.onrender.com/"
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "guild_config.json"
@@ -1164,7 +1166,7 @@ class FishVoiceSelect(discord.ui.Select):
             for voice in view.voices[:25]
         ]
         super().__init__(
-            placeholder="Escolha a voz usada pelo bot",
+            placeholder="Selecione um personagem para a voz do bot",
             min_values=1,
             max_values=1,
             options=options,
@@ -1190,9 +1192,9 @@ class FishVoiceSelect(discord.ui.Select):
         )
         await interaction.response.edit_message(
             content=(
-                f"Voz selecionada: **{selected_voice.get('title') or 'Voz Fish Audio'}**."
+                f"Personagem selecionado: **{selected_voice.get('label') or 'Voz Fish Audio'}**."
                 if not was_enabled
-                else f"Voz selecionada: **{selected_voice.get('title') or 'Voz Fish Audio'}**. "
+                else f"Personagem selecionado: **{selected_voice.get('label') or 'Voz Fish Audio'}**. "
                 "Ela será usada nas próximas respostas."
             ),
             view=FishVoiceConfigView(
@@ -1226,7 +1228,7 @@ class ClearFishVoicesButton(discord.ui.Button):
         )
         if was_enabled:
             await view.menu.set_value(view.guild_id, "module_ia_audio", False)
-        status = "Seleção de vozes limpa."
+        status = "Seleção de personagens limpa."
         if was_enabled:
             status += " O sistema foi desativado."
         await interaction.response.edit_message(
@@ -1253,14 +1255,15 @@ class FishVoiceConfigView(discord.ui.View):
         self.guild_id = guild_id
         self.voices = voices
         self.selected_voice_id = selected_voice_id
-        self.add_item(FishVoiceSelect(self))
+        if self.voices:
+            self.add_item(FishVoiceSelect(self))
         self.add_item(ClearFishVoicesButton())
 
 
 class FishVoiceConfigButton(discord.ui.Button):
     def __init__(self):
         super().__init__(
-            label="Escolher voz pública",
+            label="Carregar personagens (Vozes)",
             style=discord.ButtonStyle.primary,
         )
 
@@ -1289,8 +1292,8 @@ class FishVoiceConfigButton(discord.ui.Button):
 
         if not voices:
             return await interaction.followup.send(
-                "Nenhuma das vozes solicitadas está disponível na biblioteca "
-                "licenciada do Fish Audio. Consulte os logs do bot.",
+                "Nenhum dos personagens solicitados está disponível na biblioteca "
+                "licenciada do Fish Audio. Verifique os logs do bot.",
                 ephemeral=True,
             )
 
@@ -1339,11 +1342,11 @@ class FishVoiceConfigButton(discord.ui.Button):
         await interaction.followup.send(
             content=(
                 (
-                    "Escolha uma voz disponível. Hakari é selecionada por padrão "
+                    "Use o menu abaixo para escolher o personagem. Hakari é selecionado por padrão "
                     "quando está disponível; todas as opções são vozes licenciadas."
                     if selected_voice is not None
-                    else "A voz padrão Hakari não está disponível; escolha uma "
-                    "das outras vozes listadas. O sistema precisa de uma voz "
+                    else "A voz padrão Hakari não está disponível; escolha um "
+                    "dos outros personagens listados através do menu abaixo. O sistema precisa de uma voz "
                     "selecionada para ser ativado."
                 )
             ),
@@ -1405,7 +1408,7 @@ class ToggleSettingButton(discord.ui.Button):
             and not view.menu.ai_audio_voice_id(interaction.guild_id)
         ):
             return await interaction.response.send_message(
-                "Escolha uma voz Fish Audio em `IA em áudio` antes de ativar "
+                "Escolha um personagem em `IA em áudio` antes de ativar "
                 "o sistema.",
                 ephemeral=True,
             )
@@ -1929,7 +1932,7 @@ class MenuView(ComponentsV2View):
         elif kind == "fish_voices":
             display = (
                 self.menu.get_value(guild.id, "ia_audio_voice_name")
-                or "Nenhuma voz selecionada"
+                or "Nenhum personagem selecionado"
             )
         elif kind == "quotes_style":
             style = quote_style_with_defaults(
@@ -2545,8 +2548,7 @@ class Menu(commands.Cog):
 
                 if matching_model is None:
                     print(
-                        "Fish Audio: voz indisponível na biblioteca pública "
-                        f"licenciada; não será exibida: {voice_spec['label']}.",
+                        f"Personagem indisponível na Fish Audio, não será exibido: {voice_spec['label']}",
                         flush=True,
                     )
                     continue

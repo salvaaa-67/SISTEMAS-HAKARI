@@ -189,8 +189,10 @@ class MentionAudio(commands.Cog):
         voice_id = menu.ai_audio_voice_id(message.guild.id)
         if voice_id is None:
             return
+        
         groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
         fish_api_key = os.getenv("FISH_API_KEY", "").strip()
+        
         if not groq_api_key or not fish_api_key:
             await message.reply(
                 "Para responder em áudio, configure `GROQ_API_KEY` e "
