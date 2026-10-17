@@ -14,7 +14,7 @@ from discord.ext import commands
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 FISH_API_URL = "https://api.fish.audio"
-GROQ_MODEL = "llama-3.1-8b-instant"
+GROQ_MODEL = "llama-3.3-70b-versatile"
 FISH_TTS_MODEL = "s2.1-pro-free"
 MAX_RESPONSE_WORDS = 40
 MAX_AUDIO_SECONDS = 29
