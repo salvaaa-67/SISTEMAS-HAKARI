@@ -26,6 +26,64 @@ from .quotes import (
 
 DEVELOPER_ID = 1344736884089426022
 RANKING_INTRO_DESCRIPTION_MAX_LENGTH = 1500
+MAX_AI_AUDIO_VOICES = 15
+FISH_PUBLIC_VOICE_SPECS = (
+    {
+        "key": "neymar",
+        "label": "Neymar",
+        "queries": ("Neymar",),
+        "match_terms": ("neymar",),
+    },
+    {
+        "key": "verity",
+        "label": "Verity (Minecraft)",
+        "queries": ("Verity",),
+        "match_terms": ("verity",),
+    },
+    {
+        "key": "sukuna",
+        "label": "Sukuna (Jujutsu Kaisen)",
+        "queries": ("Sukuna",),
+        "match_terms": ("sukuna",),
+    },
+    {
+        "key": "luffy",
+        "label": "Luffy (One Piece)",
+        "queries": ("Luffy",),
+        "match_terms": ("luffy",),
+    },
+    {
+        "key": "zoro",
+        "label": "Zoro (One Piece)",
+        "queries": ("Zoro",),
+        "match_terms": ("zoro",),
+    },
+    {
+        "key": "patrick_jane",
+        "label": "Patrick Jane (The Mentalist)",
+        "queries": ("Patrick Jane", "Patrick",),
+        "match_terms": ("patrick", "jane"),
+    },
+    {
+        "key": "darth_vader",
+        "label": "Darth Vader (Star Wars)",
+        "queries": ("Darth Vader", "Vader"),
+        "match_terms": ("vader",),
+    },
+    {
+        "key": "satoru_gojo",
+        "label": "Satoru Gojo (Jujutsu Kaisen)",
+        "queries": ("Satoru Gojo", "Gojo Satoru", "Gojo"),
+        "match_terms": ("gojo",),
+    },
+    {
+        "key": "hakari",
+        "label": "Hakari (padrão)",
+        "queries": ("Hakari",),
+        "match_terms": ("hakari",),
+        "default": True,
+    },
+)
 FALLBACK_MENU_BANNER = "https://i.postimg.cc/kgv8f49w/banner-hakari-bot.png"
 MENU_WEBSITE_URL = "https://sistemas-hakari-igw0.onrender.com/"
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "guild_config.json"
@@ -43,6 +101,7 @@ MODULES = {
     "welcome": "Boas-vindas",
     "insta": "Instagram",
     "roblox": "Avatares Roblox",
+    "ia_audio": "IA em áudio",
 }
 
 SETTINGS = {
@@ -145,6 +204,18 @@ SETTINGS = {
         "items": {
             f"module_{module}": (f"Ativar {label}", "toggle")
             for module, label in MODULES.items()
+            if module != "ia_audio"
+        },
+    },
+    "ia_audio": {
+        "label": "IA em áudio",
+        "description": (
+            "Escolha uma voz pronta específica da biblioteca licenciada do "
+            "Fish Audio e ative respostas faladas quando mencionarem o bot."
+        ),
+        "items": {
+            "module_ia_audio": ("Ativar respostas de IA em áudio", "toggle"),
+            "ia_audio_voice_id": ("Escolher voz Fish Audio", "fish_voices"),
         },
     },
     "logs": {
@@ -663,6 +734,7 @@ class SettingSelect(discord.ui.Select):
                         "welcome_text",
                         "welcome_assets",
                         "quotes_style",
+                        "fish_voices",
                     }
                     else "Defina o valor numérico desta configuração."
                     if kind == "number"
@@ -1081,6 +1153,210 @@ class QuoteStyleButton(discord.ui.Button):
         )
 
 
+class FishVoiceSelect(discord.ui.Select):
+    def __init__(self, view: "FishVoiceConfigView"):
+        options = [
+            discord.SelectOption(
+                label=voice["label"][:100],
+                value=voice["id"],
+                default=voice["id"] == view.selected_voice_id,
+            )
+            for voice in view.voices[:25]
+        ]
+        super().__init__(
+            placeholder="Escolha a voz usada pelo bot",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+        self.config_view = view
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.config_view
+        selected_voice_id = self.values[0]
+        selected_voice = next(
+            voice for voice in view.voices
+            if voice["id"] == selected_voice_id
+        )
+        await view.menu.set_values(
+            view.guild_id,
+            {
+                "ia_audio_voice_id": selected_voice_id,
+                "ia_audio_voice_name": selected_voice["label"],
+            },
+        )
+        was_enabled = bool(
+            view.menu.get_value(view.guild_id, "module_ia_audio", False)
+        )
+        await interaction.response.edit_message(
+            content=(
+                f"Voz selecionada: **{selected_voice.get('title') or 'Voz Fish Audio'}**."
+                if not was_enabled
+                else f"Voz selecionada: **{selected_voice.get('title') or 'Voz Fish Audio'}**. "
+                "Ela será usada nas próximas respostas."
+            ),
+            view=FishVoiceConfigView(
+                view.menu,
+                view.guild_id,
+                view.voices,
+                selected_voice_id,
+            ),
+        )
+
+
+class ClearFishVoicesButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(
+            label="Limpar seleção",
+            style=discord.ButtonStyle.secondary,
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view: FishVoiceConfigView = self.view
+        await view.menu.set_values(
+            view.guild_id,
+            {
+                "ia_audio_voice_id": None,
+                "ia_audio_voice_name": None,
+            },
+        )
+        was_enabled = bool(
+            view.menu.get_value(view.guild_id, "module_ia_audio", False)
+        )
+        if was_enabled:
+            await view.menu.set_value(view.guild_id, "module_ia_audio", False)
+        status = "Seleção de vozes limpa."
+        if was_enabled:
+            status += " O sistema foi desativado."
+        await interaction.response.edit_message(
+            content=status,
+            view=FishVoiceConfigView(
+                view.menu,
+                view.guild_id,
+                view.voices,
+                None,
+            ),
+        )
+
+
+class FishVoiceConfigView(discord.ui.View):
+    def __init__(
+        self,
+        menu: "Menu",
+        guild_id: int,
+        voices: list[dict],
+        selected_voice_id: str | None,
+    ):
+        super().__init__(timeout=300)
+        self.menu = menu
+        self.guild_id = guild_id
+        self.voices = voices
+        self.selected_voice_id = selected_voice_id
+        self.add_item(FishVoiceSelect(self))
+        self.add_item(ClearFishVoicesButton())
+
+
+class FishVoiceConfigButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(
+            label="Escolher voz pública",
+            style=discord.ButtonStyle.primary,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view: MenuView = self.view
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            voices = await view.menu.fetch_fish_audio_voices()
+        except (
+            aiohttp.ClientError,
+            asyncio.TimeoutError,
+            RuntimeError,
+            ValueError,
+        ) as error:
+            print(
+                f"Não foi possível carregar as vozes Fish Audio "
+                f"(guild={interaction.guild_id}): "
+                f"{type(error).__name__}: {error}",
+                flush=True,
+            )
+            return await interaction.followup.send(
+                "Não consegui carregar as vozes Fish Audio. Verifique se "
+                "`FISH_API_KEY` está configurada no Render e tente novamente.",
+                ephemeral=True,
+            )
+
+        if not voices:
+            return await interaction.followup.send(
+                "Nenhuma das vozes solicitadas está disponível na biblioteca "
+                "licenciada do Fish Audio. Consulte os logs do bot.",
+                ephemeral=True,
+            )
+
+        selected_voice_id = view.menu.ai_audio_voice_id(interaction.guild_id)
+        selected_voice = next(
+            (
+                voice
+                for voice in voices
+                if voice["id"] == selected_voice_id
+            ),
+            None,
+        )
+        if selected_voice is None:
+            selected_voice = next(
+                (voice for voice in voices if voice.get("default")),
+                None,
+            )
+            if selected_voice is not None:
+                selected_voice_id = selected_voice["id"]
+                await view.menu.set_values(
+                    interaction.guild_id,
+                    {
+                        "ia_audio_voice_id": selected_voice_id,
+                        "ia_audio_voice_name": selected_voice["label"],
+                    },
+                )
+            else:
+                await view.menu.set_values(
+                    interaction.guild_id,
+                    {
+                        "ia_audio_voice_id": None,
+                        "ia_audio_voice_name": None,
+                    },
+                )
+                if view.menu.get_value(
+                    interaction.guild_id,
+                    "module_ia_audio",
+                    False,
+                ):
+                    await view.menu.set_value(
+                        interaction.guild_id,
+                        "module_ia_audio",
+                        False,
+                    )
+
+        await interaction.followup.send(
+            content=(
+                (
+                    "Escolha uma voz disponível. Hakari é selecionada por padrão "
+                    "quando está disponível; todas as opções são vozes licenciadas."
+                    if selected_voice is not None
+                    else "A voz padrão Hakari não está disponível; escolha uma "
+                    "das outras vozes listadas. O sistema precisa de uma voz "
+                    "selecionada para ser ativado."
+                )
+            ),
+            view=FishVoiceConfigView(
+                view.menu,
+                interaction.guild_id,
+                voices[:MAX_AI_AUDIO_VOICES],
+                selected_voice_id,
+            ),
+            ephemeral=True,
+        )
+
+
 class NumberSettingButton(discord.ui.Button):
     def __init__(self, view: "MenuView", label: str):
         super().__init__(label=f"Definir: {label}", style=discord.ButtonStyle.primary)
@@ -1123,6 +1399,16 @@ class ToggleSettingButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         view: MenuView = self.view
         current = bool(view.menu.get_value(interaction.guild_id, view.setting, False))
+        if (
+            view.setting == "module_ia_audio"
+            and not current
+            and not view.menu.ai_audio_voice_id(interaction.guild_id)
+        ):
+            return await interaction.response.send_message(
+                "Escolha uma voz Fish Audio em `IA em áudio` antes de ativar "
+                "o sistema.",
+                ephemeral=True,
+            )
         await view.menu.set_value(interaction.guild_id, view.setting, not current)
         view.rebuild()
         await interaction.response.edit_message(
@@ -1640,6 +1926,11 @@ class MenuView(ComponentsV2View):
                 f"Imagem: {image or 'não enviada'}\n"
                 f"Ícone do título: {author_icon or 'não enviado'}"
             )
+        elif kind == "fish_voices":
+            display = (
+                self.menu.get_value(guild.id, "ia_audio_voice_name")
+                or "Nenhuma voz selecionada"
+            )
         elif kind == "quotes_style":
             style = quote_style_with_defaults(
                 self.menu.get_value(
@@ -1728,6 +2019,8 @@ class MenuView(ComponentsV2View):
             elif kind == "toggle":
                 enabled = self.menu.get_value(self.guild_id, self.setting, False)
                 self.add_item(ToggleSettingButton(self, bool(enabled)))
+            elif kind == "fish_voices":
+                self.add_item(FishVoiceConfigButton())
         self.add_item(AccessButton())
         if self.user_id == DEVELOPER_ID:
             self.add_item(RestrictedAreaButton(self.menu))
@@ -2188,6 +2481,86 @@ class Menu(commands.Cog):
     def get_value(self, guild_id: int, key: str, default=None):
         return self.config.get(str(guild_id), {}).get("settings", {}).get(key, default)
 
+    def ai_audio_voice_id(self, guild_id: int) -> str | None:
+        value = self.get_value(guild_id, "ia_audio_voice_id")
+        return value if isinstance(value, str) and value else None
+
+    async def fetch_fish_audio_voices(self) -> list[dict[str, str | bool]]:
+        api_key = os.getenv("FISH_API_KEY", "").strip()
+        if not api_key:
+            raise RuntimeError("A variável FISH_API_KEY não está configurada.")
+
+        timeout = aiohttp.ClientTimeout(total=60, connect=10)
+        available_voices = []
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            for voice_spec in FISH_PUBLIC_VOICE_SPECS:
+                matching_model = None
+                for query in voice_spec["queries"]:
+                    async with session.get(
+                        "https://api.fish.audio/model",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                        params={
+                            "self": "false",
+                            "licensed": "true",
+                            "title": query,
+                            "page_size": "100",
+                            "sort_by": "score",
+                        },
+                    ) as response:
+                        if response.status >= 400:
+                            raise RuntimeError(
+                                "Fish Audio retornou HTTP "
+                                f"{response.status} ao buscar {voice_spec['label']}."
+                            )
+                        data = await response.json()
+
+                    if not isinstance(data, dict) or not isinstance(
+                        data.get("items"), list
+                    ):
+                        raise ValueError(
+                            "A busca Fish Audio retornou um formato inválido "
+                            f"para {voice_spec['label']}."
+                        )
+
+                    matching_model = next(
+                        (
+                            model
+                            for model in data["items"]
+                            if isinstance(model, dict)
+                            and model.get("state") == "trained"
+                            and model.get("type") == "tts"
+                            and model.get("visibility") == "public"
+                            and model.get("licensed") is True
+                            and isinstance(model.get("_id"), str)
+                            and all(
+                                term.casefold()
+                                in (model.get("title") or "").casefold()
+                                for term in voice_spec["match_terms"]
+                            )
+                        ),
+                        None,
+                    )
+                    if matching_model is not None:
+                        break
+
+                if matching_model is None:
+                    print(
+                        "Fish Audio: voz indisponível na biblioteca pública "
+                        f"licenciada; não será exibida: {voice_spec['label']}.",
+                        flush=True,
+                    )
+                    continue
+
+                available_voices.append(
+                    {
+                        "id": matching_model["_id"],
+                        "label": voice_spec["label"],
+                        "default": voice_spec.get("default", False),
+                    }
+                )
+
+        return available_voices
+
     async def set_values(self, guild_id: int, values: dict) -> None:
         guild_config = self.config.setdefault(str(guild_id), {})
         guild_config.setdefault("settings", {}).update(values)
@@ -2314,6 +2687,8 @@ class Menu(commands.Cog):
             guild_id, f"module_{module}", False
         ):
             return False
+        if module == "ia_audio":
+            return self.ai_audio_voice_id(guild_id) is not None
         if module == "boost":
             required_settings = (
                 "booster_role",
