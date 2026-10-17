@@ -2726,11 +2726,11 @@ class Menu(commands.Cog):
             name="Veja algumas sugestões:",
             value=(
                 "1. **Instagram**\n"
-                "- configure o Insta no seu servidor!\n"
+                "configure o Insta no seu servidor!\n"
                 "2. **Avatar Roblox**\n"
-                "- configure o módulo de mostrar avatares Roblox!\n"
+                "configure o módulo de mostrar avatares Roblox!\n"
                 "3. **E muito mais está por vir...**\n"
-                "- mas você tem que ter paciência hein! **fazer um bot Discord NÃO é fácil.**"
+                "mas você tem que ter paciência hein! **fazer um bot Discord NÃO é fácil.**"
             ),
             inline=False,
         )
