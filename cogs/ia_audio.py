@@ -1,6 +1,9 @@
 import asyncio
+import base64
+import json
 import os
 import re
+import struct
 import subprocess
 import tempfile
 from io import BytesIO
@@ -161,10 +164,10 @@ class MentionAudio(commands.Cog):
         return audio_data
 
     @staticmethod
-    def _trim_audio(audio_data: bytes) -> bytes:
+    def _prepare_voice_message(audio_data: bytes) -> tuple[bytes, float, str]:
         with tempfile.TemporaryDirectory(prefix="hakari_ia_") as temp_dir:
             input_path = Path(temp_dir) / "resposta_original.mp3"
-            output_path = Path(temp_dir) / "resposta.mp3"
+            output_path = Path(temp_dir) / "resposta.ogg"
             input_path.write_bytes(audio_data)
             result = subprocess.run(
                 [
@@ -175,10 +178,18 @@ class MentionAudio(commands.Cog):
                     "-t",
                     str(MAX_AUDIO_SECONDS),
                     "-vn",
-                    "-codec:a",
-                    "libmp3lame",
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "48000",
+                    "-c:a",
+                    "libopus",
                     "-b:a",
-                    "128k",
+                    "64k",
+                    "-application",
+                    "voip",
+                    "-f",
+                    "ogg",
                     str(output_path),
                 ],
                 capture_output=True,
@@ -190,7 +201,84 @@ class MentionAudio(commands.Cog):
                     "Não foi possível limitar a duração do áudio: "
                     + result.stderr.decode("utf-8", errors="replace")[-500:]
                 )
-            return output_path.read_bytes()
+            pcm_result = subprocess.run(
+                [
+                    FFMPEG_EXECUTABLE,
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    str(output_path),
+                    "-f",
+                    "s16le",
+                    "-acodec",
+                    "pcm_s16le",
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "8000",
+                    "pipe:1",
+                ],
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+            if pcm_result.returncode != 0:
+                raise RuntimeError(
+                    "Não foi possível analisar o áudio para a mensagem de voz: "
+                    + pcm_result.stderr.decode("utf-8", errors="replace")[-500:]
+                )
+
+            pcm_data = pcm_result.stdout
+            if not pcm_data or len(pcm_data) % 2:
+                raise ValueError("O áudio convertido não contém amostras válidas.")
+
+            sample_count = len(pcm_data) // 2
+            samples = struct.unpack(f"<{sample_count}h", pcm_data)
+            duration = sample_count / 8000
+            bucket_peaks = []
+            for bucket in range(256):
+                start = bucket * sample_count // 256
+                end = (bucket + 1) * sample_count // 256
+                bucket_peaks.append(
+                    max((abs(sample) for sample in samples[start:end]), default=0)
+                )
+
+            max_peak = max(bucket_peaks)
+            waveform = bytes(
+                round(peak * 255 / max_peak) if max_peak else 0
+                for peak in bucket_peaks
+            )
+            return (
+                output_path.read_bytes(),
+                duration,
+                base64.b64encode(waveform).decode("ascii"),
+            )
+
+    @staticmethod
+    async def _send_voice_message(
+        channel: discord.abc.Messageable,
+        audio_data: bytes,
+        duration: float,
+        waveform: str,
+    ) -> discord.Message:
+        file = discord.File(BytesIO(audio_data), filename="resposta-hakari.ogg")
+        state = channel._state
+        with discord.http.handle_message_parameters(
+            file=file,
+            flags=discord.MessageFlags(voice=True),
+            allowed_mentions=discord.AllowedMentions.none(),
+        ) as params:
+            payload = json.loads(params.multipart[0]["value"])
+            payload["attachments"][0].update(
+                {"duration_secs": duration, "waveform": waveform}
+            )
+            params.multipart[0]["value"] = json.dumps(
+                payload,
+                separators=(",", ":"),
+            )
+            data = await state.http.send_message(channel.id, params=params)
+        return state.create_message(channel=channel, data=data)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -249,17 +337,16 @@ class MentionAudio(commands.Cog):
                         text,
                         voice_id,
                     )
-                bounded_audio = await asyncio.to_thread(
-                    self._trim_audio,
+                voice_audio, duration, waveform = await asyncio.to_thread(
+                    self._prepare_voice_message,
                     audio_data,
                 )
 
-            await message.channel.send(
-                file=discord.File(
-                    BytesIO(bounded_audio),
-                    filename="resposta-hakari.mp3",
-                ),
-                allowed_mentions=discord.AllowedMentions.none(),
+            await self._send_voice_message(
+                message.channel,
+                voice_audio,
+                duration,
+                waveform,
             )
         except FishVoiceNotFoundError as error:
             print(

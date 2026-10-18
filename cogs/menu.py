@@ -26,7 +26,7 @@ from .quotes import (
 
 DEVELOPER_ID = 1344736884089426022
 RANKING_INTRO_DESCRIPTION_MAX_LENGTH = 1500
-MAX_AI_AUDIO_VOICES = 15
+MAX_AI_AUDIO_VOICES = 25
 
 FISH_PUBLIC_VOICE_SPECS = (
     {
@@ -92,6 +92,83 @@ FISH_PUBLIC_VOICE_SPECS = (
         "id": "ecbaa33bef134b0580fa2d438202aeae",
         "queries": ("Darth Vader", "Vader"),
         "match_terms": ("vader",),
+    },
+    {
+        "key": "goku",
+        "label": "Goku (Dragon Ball)",
+        "id": "dece2a4c7f8d476b8da3c3a6707298d4",
+        "queries": ("Goku",),
+        "match_terms": ("goku",),
+    },
+    {
+        "key": "cristiano_ronaldo",
+        "label": "Cristiano Ronaldo (Jogador de futebol)",
+        "id": "f800d4c9e73b4dbd849be082315629c4",
+        "queries": ("Cristiano Ronaldo", "Ronaldo"),
+        "match_terms": ("cristiano", "ronaldo"),
+    },
+    {
+        "key": "messi",
+        "label": "Messi (Jogador de futebol)",
+        "id": "5e310993c0134ce2aa96f12d7d05aeb2",
+        "queries": ("Messi",),
+        "match_terms": ("messi",),
+    },
+    {
+        "key": "itachi_uchiha",
+        "label": "Itachi Uchiha (Naruto)",
+        "id": "5a6cb585b094dedb241365e7e271973",
+        "queries": ("Itachi Uchiha", "Itachi"),
+        "match_terms": ("itachi",),
+    },
+    {
+        "key": "sasuke_uchiha",
+        "label": "Sasuke Uchiha (Naruto)",
+        "id": "aedb06f6daa84a1db52c7479c7235910",
+        "queries": ("Sasuke Uchiha", "Sasuke"),
+        "match_terms": ("sasuke",),
+    },
+    {
+        "key": "light_yagami",
+        "label": "Light Yagami (Death Note)",
+        "id": "567a99893e144be1a4eb89b55eb10234",
+        "queries": ("Light Yagami", "Light"),
+        "match_terms": ("light", "yagami"),
+    },
+    {
+        "key": "denji",
+        "label": "Denji (Chainsaw Man)",
+        "id": "b2966fe298c342a3b6fe6c575ea9c6a6",
+        "queries": ("Denji",),
+        "match_terms": ("denji",),
+    },
+    {
+        "key": "power",
+        "label": "Power (Chainsaw Man)",
+        "id": "9e93341200f042b2a7c46fdb5e8bac4e",
+        "queries": ("Power Chainsaw Man", "Power"),
+        "match_terms": ("power",),
+    },
+    {
+        "key": "reze",
+        "label": "Reze (Chainsaw Man)",
+        "id": "159479ec69e74135a0a56ed9d1c7e48d",
+        "queries": ("Reze",),
+        "match_terms": ("reze",),
+    },
+    {
+        "key": "saitama",
+        "label": "Saitama (One Punch Man)",
+        "id": "c5062a07fda44449a6241a037ecddd25",
+        "queries": ("Saitama",),
+        "match_terms": ("saitama",),
+    },
+    {
+        "key": "marin_kitagawa",
+        "label": "Marin Kitagawa (My Dress Up Darling)",
+        "id": "962d6c55da8742fe8f82b6a2556c90ad",
+        "queries": ("Marin Kitagawa", "Marin"),
+        "match_terms": ("marin",),
     },
 )
 
