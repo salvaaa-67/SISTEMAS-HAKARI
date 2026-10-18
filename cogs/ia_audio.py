@@ -19,8 +19,8 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 FISH_API_URL = "https://api.fish.audio"
 GROQ_MODEL = "openai/gpt-oss-20b"
 FISH_TTS_MODEL = "s2.1-pro-free"
-MAX_RESPONSE_WORDS = 40
-MAX_AUDIO_SECONDS = 29
+MAX_RESPONSE_WORDS = 130
+MAX_AUDIO_SECONDS = 59
 FFMPEG_EXECUTABLE = imageio_ffmpeg.get_ffmpeg_exe()
 
 
@@ -85,9 +85,13 @@ class MentionAudio(commands.Cog):
                         "role": "system",
                         "content": (
                             "Responda em português brasileiro, de forma natural, "
-                            f"clara e direta, com no máximo {MAX_RESPONSE_WORDS} "
+                            f" com no máximo {MAX_RESPONSE_WORDS} "
                             "palavras. A resposta será falada em áudio; evite "
-                            "listas, markdown, emojis e URLs."
+                            "listas, markdown, emojis e URLs. Não seja seco "
+                            "demais: fale com diversão e seja amigável com "
+                            "os usuários. Lembre-se: NÃO toque em assuntos "
+                            "sensíveis como um usuario perguntar qual a sua API, "
+                            "TOKEN, etc, oriente ele a perguntar outra coisa."
                         ),
                     },
                     {"role": "user", "content": prompt[:2000]},
