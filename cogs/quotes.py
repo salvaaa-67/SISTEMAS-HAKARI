@@ -1,4 +1,5 @@
 import asyncio
+import re
 from io import BytesIO
 from pathlib import Path
 
@@ -341,6 +342,14 @@ class Quotes(commands.Cog):
             or self.bot.user is None
             or not any(user.id == self.bot.user.id for user in message.mentions)
         ):
+            return
+
+        content_without_mention = re.sub(
+            rf"<@!?{self.bot.user.id}>",
+            "",
+            message.content,
+        ).strip()
+        if content_without_mention:
             return
 
         menu = self.bot.get_cog("Menu")

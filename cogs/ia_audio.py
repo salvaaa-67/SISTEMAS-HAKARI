@@ -265,6 +265,7 @@ class MentionAudio(commands.Cog):
         audio_data: bytes,
         duration: float,
         waveform: str,
+        reply_to: discord.Message,
     ) -> discord.Message:
         file = discord.File(BytesIO(audio_data), filename="resposta-hakari.ogg")
         state = channel._state
@@ -277,6 +278,9 @@ class MentionAudio(commands.Cog):
             payload["attachments"][0].update(
                 {"duration_secs": duration, "waveform": waveform}
             )
+            payload["message_reference"] = reply_to.to_reference(
+                fail_if_not_exists=False
+            ).to_dict()
             params.multipart[0]["value"] = json.dumps(
                 payload,
                 separators=(",", ":"),
@@ -351,6 +355,7 @@ class MentionAudio(commands.Cog):
                 voice_audio,
                 duration,
                 waveform,
+                message,
             )
         except FishVoiceNotFoundError as error:
             print(
