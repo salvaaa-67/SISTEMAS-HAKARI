@@ -315,26 +315,25 @@ async def on_app_command_error(
 # ============================================================
 # STATUS ROTATIVO
 
-@tasks.loop(seconds=40)
+@tasks.loop(seconds=35)
 async def trocar_status() -> None:
     try:
-        # A lista fica aqui dentro para calcular a latência atual a cada 40s
+        # Bot conta quantos arquivos tem na pasta cogs
+        total_cogs = len([f for f in os.listdir("cogs") if f.endswith(".py")])
+
+        # A lista fica aqui dentro para calcular a latência atual a cada 35s
         status_atualizados = [
-            "oi",
-            "HAKARI V2.16",
-            "feito pelo salvador",
-            f"latência: {round(bot.latency * 1000)}ms",
-            "six seven",
-            "ser um bot é legal sabia",
-            "petista!",
-            "jogador profissional de liga das lendas",
-            "aurudo",
-            "HelloWorld(print)",
-            "amigo da floresta"
+            "Versão 2.17",
+            "Desenvolvido por Salvador",
+            f"Latência: {round(bot.latency * 1000)}ms",
+            f"Atualmente tendo {total_cogs} sistemas ativos",
+            "Use /menu para me configurar! As alterações valem apenas para o seu servidor",
+            "Minha linguagem é PYTHON, e a sua?",
+            "Sim, tudo tem que configurar no /menu primeiro para depooooois usar 😭"
         ]
 
         await bot.change_presence(
-            status=discord.Status.online,
+            status=discord.Status.do_not_disturb,
             activity=discord.CustomActivity(
                 name=random.choice(status_atualizados)
             ),
