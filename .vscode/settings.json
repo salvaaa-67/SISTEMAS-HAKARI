@@ -1,0 +1,9 @@
+{
+    "vscord.status.details.text.editing": "Trabalhando em {workspace}",
+    "vscord.status.details.text.idle": "VSCode Inativo",
+    "vscord.status.details.text.notInFile": "Não está em um arquivo",
+    "vscord.status.details.text.noWorkSpaceText": "Não está em uma Workspace",
+    "vscord.status.details.text.viewing": "Trabalhando em {file_name}{file_extension}",
+    "vscord.status.state.text.editing": "Editando um arquivo: {file_name}{file_extension}",
+    "vscord.status.state.text.viewing": "Vendo um arquivo: {file_name}{file_extension}"
+}
