@@ -225,9 +225,9 @@ class Utilities(commands.Cog):
         latency = round(self.bot.latency * 1000)
 
         embed = discord.Embed(
-            title="🏓 PONG PORRA!",
+            title="🏓 Pong!",
             description=(
-                f"eu respondo seus comandos em até: **{latency} milissegundos**!"
+                f"Eu respondo seus comandos em até: **{latency} milissegundos**."
             ),
             color=(
                 discord.Color.green()
