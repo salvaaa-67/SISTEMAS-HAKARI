@@ -2415,33 +2415,65 @@ class Menu(commands.Cog):
         )
         embed.add_field(name="Responsável", value=actor_text, inline=False)
         embed.add_field(name="Alvo", value=target_text, inline=False)
+        
+        def format_value(val) -> str:
+            if val is None or val == "":
+                return "*(nenhum)*"
+            if isinstance(val, list):
+                if not val:
+                    return "*(vazio)*"
+                return ", ".join(getattr(item, "name", str(item)) for item in val)
+            if isinstance(val, datetime):
+                return f"<t:{int(val.timestamp())}:f>"
+            if hasattr(val, "name"):
+                return val.name
+            if isinstance(val, bool):
+                return "Sim" if val else "Não"
+            return str(val)
+
         before = vars(entry.changes.before)
         after = vars(entry.changes.after)
         changed_values = []
         for key in dict.fromkeys((*before, *after)):
-            old_value = before.get(key, "—")
-            new_value = after.get(key, "—")
+            old_value = before.get(key)
+            new_value = after.get(key)
             if old_value == new_value:
                 continue
+                
+            key_name = {
+                "roles": "Cargos",
+                "timed_out_until": "Silenciado até",
+                "nick": "Apelido",
+                "name": "Nome",
+                "type": "Tipo",
+                "color": "Cor",
+            }.get(key, key.replace("_", " ").capitalize())
+
+            old_clean = format_value(old_value)
+            new_clean = format_value(new_value)
+
             changed_values.append(
-                f"**{key.replace('_', ' ').capitalize()}:** "
-                f"`{str(old_value)[:180]}` → `{str(new_value)[:180]}`"
+                f"**{key_name}:** `{old_clean[:180]}` ➔ `{new_clean[:180]}`"
             )
+            
         if changed_values:
             embed.add_field(
                 name="Alterações",
                 value="\n".join(changed_values)[:1024],
                 inline=False,
             )
+            
         if entry.reason:
             embed.add_field(name="Motivo", value=entry.reason[:1024], inline=False)
+            
         embed.set_footer(
             text=f"Servidor: {guild.id} · Registro: {entry.id}"
         )
 
         try:
             await channel.send(
-                embed=embed,
+                embeds=[],
+                view=components_v2(embed),
                 allowed_mentions=discord.AllowedMentions.none(),
             )
         except (discord.Forbidden, discord.HTTPException) as error:
