@@ -190,9 +190,18 @@ MODULES = {
     "insta": "Instagram",
     "roblox": "Avatares Roblox",
     "ia_audio": "IA em áudio",
+    "levels": "Sistema de XP e Níveis",
 }
 
 SETTINGS = {
+
+    "levels": {
+        "label": "Sistema de XP e Níveis",
+        "description": "Configure onde os avisos de Level Up serão enviados.",
+        "items": {
+            "level_up_channel": ("Canal para avisos de Level Up", "channel"),
+        },
+    },  
     "admin": {
         "label": "Moderação",
         "description": "Configure o que acontece além da advertência.",
@@ -313,9 +322,6 @@ SETTINGS = {
             "O bot precisa das permissões Ver registro de auditoria e "
             "Enviar mensagens/links de incorporação."
         ),
-        "items": {
-            "audit_log_channel": ("Canal de registros", "channel"),
-        },
     },
 }
 
@@ -920,6 +926,7 @@ class ChannelSettingSelect(discord.ui.ChannelSelect):
             "ranking_call": "Selecione o canal do ranking de call",
             "ranking_messages": "Selecione o canal do ranking de mensagens",
             "logs": "Selecione o canal que receberá os registros",
+            "levels": "Selecione o canal para enviar os níveis",
         }.get(view.category, "Selecione o canal deste módulo")
         super().__init__(
             placeholder=placeholder,
