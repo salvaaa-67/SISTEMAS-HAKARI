@@ -108,7 +108,7 @@ class LikeButton(discord.ui.Button):
                 self.post_id,
                 interaction.user.id,
             )
-            message = "Curtida removida"
+            message = "Curtida removida."
         else:
             message = "Você curtiu esta publicação."
         count = await self.cog.like_count(self.post_id)
