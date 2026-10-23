@@ -15,9 +15,9 @@ import imageio_ffmpeg
 from discord.ext import commands
 
 
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 FISH_API_URL = "https://api.fish.audio"
-GROQ_MODEL = "openai/gpt-oss-20b"
+OPENROUTER_MODEL = "meta-llama/llama-3.1-8b-instruct"
 FISH_TTS_MODEL = "s2.1-pro-free"
 MAX_RESPONSE_WORDS = 130
 MAX_AUDIO_SECONDS = 59
@@ -52,7 +52,7 @@ class MentionAudio(commands.Cog):
                 details = (await response.text())[:500]
                 if (
                     response.status == 404
-                    and url == GROQ_API_URL
+                    and url == OPENROUTER_API_URL
                     and json_body is not None
                 ):
                     raise RuntimeError(
@@ -76,10 +76,10 @@ class MentionAudio(commands.Cog):
     ) -> str:
         data = await self._request_json(
             session,
-            GROQ_API_URL,
+            OPENROUTER_API_URL,
             headers={"Authorization": f"Bearer {groq_api_key}"},
             json_body={
-                "model": GROQ_MODEL,
+                "model": OPENROUTER_MODEL,
                 "messages": [
                     {
                         "role": "system",
@@ -318,12 +318,12 @@ class MentionAudio(commands.Cog):
         if voice_id is None:
             return
 
-        groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
+        openrouter_api_key = os.getenv("OPEN_ROUTER_API_KEY", "").strip()
         fish_api_key = os.getenv("FISH_API_KEY", "").strip()
 
-        if not groq_api_key or not fish_api_key:
+        if not openrouter_api_key or not fish_api_key:
             await message.reply(
-                "Para responder em áudio, configure `GROQ_API_KEY` e "
+                "Para responder em áudio, configure `OPENROUTER_API_KEY` e "
                 "`FISH_API_KEY` nas variáveis do Render.",
                 mention_author=False,
                 allowed_mentions=discord.AllowedMentions.none(),
@@ -336,7 +336,7 @@ class MentionAudio(commands.Cog):
                 async with aiohttp.ClientSession(timeout=timeout) as session:
                     text = await self._generate_text(
                         session,
-                        groq_api_key,
+                        openrouter_api_key,
                         prompt,
                     )
                     audio_data = await self._generate_audio(
