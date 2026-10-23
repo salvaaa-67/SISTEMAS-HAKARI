@@ -35,4 +35,4 @@ jobs:
           git push
 
       - name: Acionar Deploy no Render
-        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: curl --fail -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
