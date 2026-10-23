@@ -329,7 +329,8 @@ async def trocar_status() -> None:
             f"Atualmente tendo {total_cogs} sistemas ativos",
             "Use /menu para me configurar! As alterações valem apenas para o seu servidor",
             "Minha linguagem é PYTHON, e a sua?",
-            "Sim, tudo tem que configurar no /menu primeiro para depooooois usar 😭"
+            "Sim, tudo tem que configurar no /menu primeiro para depooooois usar 😭",
+            "A música favorita do meu desenvolvedor é Flamewall de Camellia, e a sua?"
         ]
 
         await bot.change_presence(
