@@ -1,0 +1,23 @@
+name: Atualizar Versão
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  versionamento:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: '0'
+
+      - name: Gerar Tag de Versão
+        uses: anothrNick/github-tag-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+          DEFAULT_BUMP: patch
