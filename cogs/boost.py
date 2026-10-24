@@ -4,14 +4,15 @@ import json
 import os
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import aiohttp
+import asyncpg
 import discord
 from PIL import Image, UnidentifiedImageError
 from discord.ext import commands
 
 from .components_v2 import ComponentsV2View, components_v2
-from .database import Pool, create_pool
 
 
 MANAGED_ROLE_PREFIXES = ("família -", "cargo -")
@@ -297,7 +298,7 @@ class Boost(commands.Cog):
         self.personal_roles: dict[str, int] = {}
         self.role_icons: dict[str, str] = {}
         self.pending_icon_edits: dict[str, dict] = {}
-        self.pool: Pool | None = None
+        self.pool: asyncpg.Pool | None = None
 
     async def cog_load(self) -> None:
         if self.storage_path.exists():
@@ -308,8 +309,23 @@ class Boost(commands.Cog):
             except (OSError, json.JSONDecodeError) as error:
                 print(f"Não foi possível carregar os dados do boost: {error}")
 
+        database_url = os.getenv("DATABASE", "").strip()
+        database_variable = "DATABASE"
+        if not database_url:
+            database_url = os.getenv("DATABASE_URL", "").strip()
+            database_variable = "DATABASE_URL"
+        if not database_url:
+            print("NeonDB indisponível para o cog boost: variável DATABASE não configurada.")
+            return
+
         try:
-            self.pool = await create_pool()
+            self.pool = await asyncpg.create_pool(
+                dsn=database_url,
+                ssl="require",
+                min_size=1,
+                max_size=5,
+                command_timeout=20,
+            )
             await self.pool.execute(
                 """
                 CREATE TABLE IF NOT EXISTS boost_role_owners (
@@ -318,7 +334,7 @@ class Boost(commands.Cog):
                     family_role_id BIGINT,
                     personal_role_id BIGINT,
                     voice_channel_id BIGINT,
-                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     PRIMARY KEY (guild_id, user_id)
                 )
                 """
@@ -330,7 +346,7 @@ class Boost(commands.Cog):
                     user_id BIGINT NOT NULL,
                     role_id BIGINT NOT NULL,
                     emoji TEXT NOT NULL,
-                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     PRIMARY KEY (guild_id, user_id, role_id)
                 )
                 """
@@ -342,8 +358,10 @@ class Boost(commands.Cog):
             if self.pool is not None:
                 await self.pool.close()
                 self.pool = None
+            database_host = urlsplit(database_url).hostname or "não identificado"
             print(
-                "Não foi possível inicializar o SQLite no cog boost: "
+                "Não foi possível inicializar o NeonDB no cog boost "
+                f"(variável={database_variable}, host={database_host}): "
                 f"{type(error).__name__}: {error}"
             )
             return
@@ -403,7 +421,7 @@ class Boost(commands.Cog):
                     voice_channel_id = COALESCE(
                         boost_role_owners.voice_channel_id, EXCLUDED.voice_channel_id
                     ),
-                    updated_at = CURRENT_TIMESTAMP
+                    updated_at = NOW()
                 """,
                 guild_id,
                 owner_id,
@@ -453,14 +471,14 @@ class Boost(commands.Cog):
         self, guild_id: int, user_id: int, role_id: int, emoji: str
     ) -> None:
         if self.pool is None:
-            raise RuntimeError("O banco de dados não está conectado.")
+            raise RuntimeError("NeonDB não está conectado.")
         await self.pool.execute(
             """
             INSERT INTO boost_role_icons (guild_id, user_id, role_id, emoji)
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (guild_id, user_id, role_id) DO UPDATE SET
                 emoji = EXCLUDED.emoji,
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = NOW()
             """,
             guild_id,
             user_id,
@@ -555,7 +573,7 @@ class Boost(commands.Cog):
 
     async def save(self) -> None:
         if self.pool is None:
-            raise RuntimeError("O banco de dados não está conectado.")
+            raise RuntimeError("NeonDB não está conectado.")
 
         records = []
         for key in self.families.keys() | self.personal_roles.keys():
@@ -583,7 +601,7 @@ class Boost(commands.Cog):
                     family_role_id = EXCLUDED.family_role_id,
                     personal_role_id = EXCLUDED.personal_role_id,
                     voice_channel_id = EXCLUDED.voice_channel_id,
-                    updated_at = CURRENT_TIMESTAMP
+                    updated_at = NOW()
                 """,
                 records,
             )
@@ -731,7 +749,7 @@ class Boost(commands.Cog):
 
         if self.pool is None:
             print(
-                f"Cargo excluído {role.id} em {guild_id}, mas não foi possível limpar o banco de dados: pool indisponível."
+                f"Cargo excluído {role.id} em {guild_id}, mas não foi possível limpar o NeonDB: pool indisponível."
             )
             return
 
@@ -753,7 +771,7 @@ class Boost(commands.Cog):
                                 WHEN family_role_id = $2 THEN NULL
                                 ELSE voice_channel_id
                             END,
-                            updated_at = CURRENT_TIMESTAMP
+                            updated_at = NOW()
                         WHERE guild_id = $1
                           AND (family_role_id = $2 OR personal_role_id = $2)
                         """,
@@ -778,7 +796,7 @@ class Boost(commands.Cog):
                         role.id,
                     )
                     backup_table_exists = await connection.fetchval(
-                        "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'temporary_role_backups')"
+                        "SELECT to_regclass('temporary_role_backups') IS NOT NULL"
                     )
                     if backup_table_exists:
                         await connection.execute(
@@ -791,7 +809,7 @@ class Boost(commands.Cog):
                         )
         except Exception as error:
             print(
-                f"Não foi possível limpar o cargo excluído {role.id} do banco de dados: "
+                f"Não foi possível limpar o cargo excluído {role.id} do NeonDB: "
                 f"{type(error).__name__}: {error}",
                 flush=True,
             )
@@ -968,7 +986,7 @@ class Boost(commands.Cog):
 
         if self.pool is None:
             return await interaction.response.send_message(
-                "<:wrong:1554659471223947324> Não consegui conectar ao banco de dados para registrar o emoji.",
+                "<:wrong:1554659471223947324> Não consegui conectar ao NeonDB para registrar o emoji.",
                 ephemeral=True,
             )
 
@@ -1094,7 +1112,7 @@ class Boost(commands.Cog):
             self.pending_icon_edits.pop(key, None)
             return await self.send_icon_feedback(
                 pending,
-                "<:wrong:1554659471223947324> O ícone foi aplicado, mas não consegui registrá-lo no banco de dados; "
+                "<:wrong:1554659471223947324> O ícone foi aplicado, mas não consegui registrá-lo no NeonDB; "
                 "a mensagem foi mantida.",
             )
 
@@ -1220,7 +1238,7 @@ class Boost(commands.Cog):
                     ),
                 )
                 return await interaction.followup.send(
-                    f"<:wrong:1554659471223947324> Call criada: {voice_channel.mention}, mas não consegui salvar os dados no banco de dados.",
+                    f"<:wrong:1554659471223947324> Call criada: {voice_channel.mention}, mas não consegui salvar os dados no NeonDB.",
                     ephemeral=True,
                 )
             await interaction.message.edit(
@@ -1396,11 +1414,11 @@ class Boost(commands.Cog):
         except Exception:
             self.families.pop(key, None)
             try:
-                await role.delete(reason="Falha ao registrar a família no banco de dados")
+                await role.delete(reason="Falha ao registrar a família no NeonDB")
             except discord.HTTPException:
                 pass
             return await ctx.send(
-                "<:wrong:1554659471223947324> Não consegui salvar sua família no banco de dados; o cargo criado foi removido."
+                "<:wrong:1554659471223947324> Não consegui salvar sua família no NeonDB; o cargo criado foi removido."
             )
         self.bot.add_view(self.family_view(ctx.guild.id, ctx.author.id))
         state = self.families[key]
@@ -1466,11 +1484,11 @@ class Boost(commands.Cog):
             except Exception:
                 self.personal_roles.pop(key, None)
                 try:
-                    await role.delete(reason="Falha ao registrar cargo pessoal no banco de dados")
+                    await role.delete(reason="Falha ao registrar cargo pessoal no NeonDB")
                 except discord.HTTPException:
                     pass
                 return await ctx.send(
-                    "<:wrong:1554659471223947324> Não consegui salvar seu cargo no banco de dados; o cargo criado foi removido."
+                    "<:wrong:1554659471223947324> Não consegui salvar seu cargo no NeonDB; o cargo criado foi removido."
                 )
             self.bot.add_view(self.personal_view(ctx.guild.id, ctx.author.id))
 

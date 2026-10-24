@@ -3,12 +3,12 @@ import os
 import re
 from urllib.parse import urlsplit
 
+import asyncpg
 import discord
 from discord.ext import commands, tasks
 
 from .menu import DEVELOPER_ID, RANKING_INTRO_DESCRIPTION_MAX_LENGTH
 from .components_v2 import ComponentsV2View, components_v2
-from .database import Pool, create_pool
 
 
 LEGACY_CHANNELS = {
@@ -77,21 +77,36 @@ class RankingResetConfirmView(discord.ui.View):
 class Ranking(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.pool: Pool | None = None
+        self.pool: asyncpg.Pool | None = None
         self.sessions_initialized = False
         self.update_locks: dict[tuple[int, str], asyncio.Lock] = {}
         self.update_semaphore = asyncio.Semaphore(5)
 
     async def cog_load(self) -> None:
+        database_url = os.getenv("DATABASE", "").strip()
+        database_variable = "DATABASE"
+        if not database_url:
+            database_url = os.getenv("DATABASE_URL", "").strip()
+            database_variable = "DATABASE_URL"
+        if not database_url:
+            print("Rankings indisponíveis: variável DATABASE não configurada.")
+            return
+
         try:
-            self.pool = await create_pool()
+            self.pool = await asyncpg.create_pool(
+                dsn=database_url,
+                ssl="require",
+                min_size=1,
+                max_size=5,
+                command_timeout=20,
+            )
             await self.pool.execute(
                 """
                 CREATE TABLE IF NOT EXISTS hakari_rank_call (
                     guild_id BIGINT NOT NULL,
                     user_id BIGINT NOT NULL,
                     total_seconds BIGINT NOT NULL DEFAULT 0,
-                    active_since INTEGER,
+                    active_since TIMESTAMPTZ,
                     PRIMARY KEY (guild_id, user_id)
                 )
                 """
@@ -121,8 +136,10 @@ class Ranking(commands.Cog):
             if self.pool is not None:
                 await self.pool.close()
                 self.pool = None
+            database_host = urlsplit(database_url).hostname or "não identificado"
             print(
-                "Não foi possível inicializar os rankings: "
+                "Não foi possível inicializar os rankings "
+                f"(variável={database_variable}, host={database_host}): "
                 f"{type(error).__name__}: {error}",
                 flush=True,
             )
@@ -176,9 +193,9 @@ class Ranking(commands.Cog):
                     INSERT INTO hakari_rank_call (
                         guild_id, user_id, total_seconds, active_since
                     )
-                    VALUES ($1, $2, 0, CAST(strftime('%s', 'now') AS INTEGER))
+                    VALUES ($1, $2, 0, NOW())
                     ON CONFLICT (guild_id, user_id) DO UPDATE SET
-                        active_since = CAST(strftime('%s', 'now') AS INTEGER)
+                        active_since = NOW()
                     """,
                     active_members,
                 )
@@ -207,10 +224,10 @@ class Ranking(commands.Cog):
                     INSERT INTO hakari_rank_call (
                         guild_id, user_id, total_seconds, active_since
                     )
-                    VALUES ($1, $2, 0, CAST(strftime('%s', 'now') AS INTEGER))
+                    VALUES ($1, $2, 0, NOW())
                     ON CONFLICT (guild_id, user_id) DO UPDATE SET
                         active_since = COALESCE(
-                            hakari_rank_call.active_since, CAST(strftime('%s', 'now') AS INTEGER)
+                            hakari_rank_call.active_since, NOW()
                         )
                     """,
                     member.guild.id,
@@ -220,7 +237,10 @@ class Ranking(commands.Cog):
                 await self.pool.execute(
                     """
                     UPDATE hakari_rank_call
-                    SET total_seconds = total_seconds + MAX(0, CAST(strftime('%s', 'now') AS INTEGER) - active_since),
+                    SET total_seconds = total_seconds + GREATEST(
+                            0,
+                            FLOOR(EXTRACT(EPOCH FROM (NOW() - active_since)))::BIGINT
+                        ),
                         active_since = NULL
                     WHERE guild_id = $1 AND user_id = $2
                       AND active_since IS NOT NULL
@@ -243,7 +263,10 @@ class Ranking(commands.Cog):
             await self.pool.execute(
                 """
                 UPDATE hakari_rank_call
-                SET total_seconds = total_seconds + MAX(0, CAST(strftime('%s', 'now') AS INTEGER) - active_since),
+                SET total_seconds = total_seconds + GREATEST(
+                        0,
+                        FLOOR(EXTRACT(EPOCH FROM (NOW() - active_since)))::BIGINT
+                    ),
                     active_since = NULL
                 WHERE guild_id = $1 AND user_id = $2
                   AND active_since IS NOT NULL
@@ -414,7 +437,10 @@ class Ranking(commands.Cog):
                 SELECT user_id,
                        total_seconds + CASE
                            WHEN active_since IS NULL THEN 0
-                           ELSE MAX(0, CAST(strftime('%s', 'now') AS INTEGER) - active_since)
+                           ELSE GREATEST(
+                               0,
+                               FLOOR(EXTRACT(EPOCH FROM (NOW() - active_since)))::BIGINT
+                           )
                        END AS score
                 FROM hakari_rank_call
                 WHERE guild_id = $1
@@ -558,10 +584,10 @@ class Ranking(commands.Cog):
                         INSERT INTO hakari_rank_call (
                             guild_id, user_id, total_seconds, active_since
                         )
-                        VALUES ($1, $2, 0, CAST(strftime('%s', 'now') AS INTEGER))
+                        VALUES ($1, $2, 0, NOW())
                         ON CONFLICT (guild_id, user_id) DO UPDATE SET
                             total_seconds = 0,
-                            active_since = CAST(strftime('%s', 'now') AS INTEGER)
+                            active_since = NOW()
                         """,
                         active_members,
                     )

@@ -1,12 +1,12 @@
 import os
-import asyncio
+
 import aiohttp
+import asyncpg
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from .components_v2 import ComponentsV2View, components_v2
-from .database import Pool, create_pool
 
 
 ROBLOX_ICON = "<:c_roblox:1555606064890773554>"
@@ -78,12 +78,22 @@ class RobloxLikeButton(discord.ui.Button):
 class Roblox(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.pool: Pool | None = None
+        self.pool: asyncpg.Pool | None = None
         self.views_registered = False
 
     async def cog_load(self) -> None:
+        database_url = os.getenv("DATABASE") or os.getenv("DATABASE_URL")
+        if not database_url:
+            print("Avatares Roblox indisponíveis: DATABASE não configurada.")
+            return
         try:
-            self.pool = await create_pool()
+            self.pool = await asyncpg.create_pool(
+                dsn=database_url,
+                ssl="require",
+                min_size=1,
+                max_size=3,
+                command_timeout=20,
+            )
             await self.pool.execute(
                 """
                 CREATE TABLE IF NOT EXISTS roblox_avatar_posts (
@@ -94,7 +104,7 @@ class Roblox(commands.Cog):
                     username TEXT NOT NULL,
                     display_name TEXT NOT NULL,
                     avatar_url TEXT NOT NULL,
-                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
                 """
             )
@@ -103,7 +113,7 @@ class Roblox(commands.Cog):
                 CREATE TABLE IF NOT EXISTS roblox_avatar_likes (
                     post_id BIGINT NOT NULL REFERENCES roblox_avatar_posts(post_id) ON DELETE CASCADE,
                     user_id BIGINT NOT NULL,
-                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     PRIMARY KEY (post_id, user_id)
                 )
                 """
