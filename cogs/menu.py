@@ -173,7 +173,7 @@ FISH_PUBLIC_VOICE_SPECS = (
 )
 
 FALLBACK_MENU_BANNER = "https://i.postimg.cc/kgv8f49w/banner-hakari-bot.png"
-MENU_WEBSITE_URL = "https://sistemas-hakari-igw0.onrender.com/"
+MENU_WEBSITE_URL = "https://hakaribot.onrender.com"
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "guild_config.json"
 WELCOME_ASSETS_DIR = CONFIG_PATH.parent / "welcome_assets"
 MODULES = {
@@ -322,6 +322,9 @@ SETTINGS = {
             "O bot precisa das permissões Ver registro de auditoria e "
             "Enviar mensagens/links de incorporação."
         ),
+        "items": {
+            "audit_log_channel": ("Canal de registros", "channel"),
+        },
     },
 }
 
@@ -835,7 +838,7 @@ class SettingSelect(discord.ui.Select):
                 ),
                 default=key == view.setting,
             )
-            for key, (label, kind) in category["items"].items()
+            for key, (label, kind) in category.get("items", {}).items()
         ]
         super().__init__(
             placeholder="Escolha uma configuração",
@@ -2082,7 +2085,7 @@ class MenuView(ComponentsV2View):
             )
         )
         self.add_item(CategorySelect(self))
-        if self.category:
+        if self.category and SETTINGS[self.category].get("items"):
             self.add_item(SettingSelect(self))
         if self.setting:
             kind = SETTINGS[self.category]["items"][self.setting][1]
