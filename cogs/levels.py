@@ -3,12 +3,12 @@ import os
 import random
 import time
 
-import asyncpg
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from .components_v2 import ComponentsV2View, components_v2
+from .database import Pool, create_pool
 
 MAX_XP = 160000
 
@@ -45,24 +45,13 @@ class ResetConfirmView(ComponentsV2View):
 class Levels(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.pool: asyncpg.Pool | None = None
+        self.pool: Pool | None = None
         self.cooldowns = {}
         self.cooldown_time = 60 # 60 segundos de cooldown entre ganho de XP
 
     async def cog_load(self) -> None:
-        database_url = os.getenv("DATABASE") or os.getenv("DATABASE_URL")
-        if not database_url:
-            print("Sistema de XP indisponível: DATABASE não configurada.")
-            return
-
         try:
-            self.pool = await asyncpg.create_pool(
-                dsn=database_url,
-                ssl="require",
-                min_size=1,
-                max_size=5,
-                command_timeout=20,
-            )
+            self.pool = await create_pool()
             await self.pool.execute(
                 '''
                 CREATE TABLE IF NOT EXISTS hakari_levels (

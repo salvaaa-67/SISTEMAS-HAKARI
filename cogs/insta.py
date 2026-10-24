@@ -4,11 +4,11 @@ import tempfile
 from pathlib import Path
 
 import aiohttp
-import asyncpg
 import discord
 from discord.ext import commands
 
 from .components_v2 import ComponentsV2View, components_v2
+from .database import Pool, Record, create_pool
 
 
 MAX_IMAGE_BYTES = 1024 ** 3
@@ -237,7 +237,7 @@ class CommentsView(ComponentsV2View):
         cog: "Insta",
         post_id: int,
         owner_id: int,
-        comments: list[asyncpg.Record],
+        comments: list[Record],
         page: int = 0,
     ):
         super().__init__(timeout=300)
@@ -311,22 +311,12 @@ class CommentsView(ComponentsV2View):
 class Insta(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.pool: asyncpg.Pool | None = None
+        self.pool: Pool | None = None
         self.views_registered = False
 
     async def cog_load(self) -> None:
-        database_url = os.getenv("DATABASE") or os.getenv("DATABASE_URL")
-        if not database_url:
-            print("Instagram indisponível: DATABASE não configurada.")
-            return
         try:
-            self.pool = await asyncpg.create_pool(
-                dsn=database_url,
-                ssl="require",
-                min_size=1,
-                max_size=5,
-                command_timeout=30,
-            )
+            self.pool = await create_pool()
             await self.pool.execute(
                 """
                 CREATE TABLE IF NOT EXISTS insta_posts (
@@ -338,7 +328,7 @@ class Insta(commands.Cog):
                     author_avatar TEXT NOT NULL,
                     caption TEXT NOT NULL DEFAULT '',
                     image_filename TEXT NOT NULL,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
@@ -347,7 +337,7 @@ class Insta(commands.Cog):
                 CREATE TABLE IF NOT EXISTS insta_likes (
                     post_id BIGINT NOT NULL REFERENCES insta_posts(post_id) ON DELETE CASCADE,
                     user_id BIGINT NOT NULL,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (post_id, user_id)
                 )
                 """
@@ -355,12 +345,12 @@ class Insta(commands.Cog):
             await self.pool.execute(
                 """
                 CREATE TABLE IF NOT EXISTS insta_comments (
-                    comment_id BIGSERIAL PRIMARY KEY,
+                    comment_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     post_id BIGINT NOT NULL REFERENCES insta_posts(post_id) ON DELETE CASCADE,
                     user_id BIGINT NOT NULL,
                     username TEXT NOT NULL,
                     comment TEXT NOT NULL,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
@@ -404,7 +394,7 @@ class Insta(commands.Cog):
             or 0
         )
 
-    async def get_comments(self, post_id: int) -> list[asyncpg.Record]:
+    async def get_comments(self, post_id: int) -> list[Record]:
         return await self.pool.fetch(
             """
             SELECT username, comment, created_at

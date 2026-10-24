@@ -135,7 +135,7 @@ class BoostAssignmentDetailsView(BoostAssignmentView):
         boost = self.admin.bot.get_cog("Boost")
         if boost is None or boost.pool is None:
             return await interaction.response.send_message(
-                "O cog boost está sem conexão com o NeonDB.", ephemeral=True
+                "O cog boost está sem conexão com o banco de dados.", ephemeral=True
             )
 
         role = guild.get_role(self.role_id)
@@ -204,7 +204,7 @@ class BoostAssignmentDetailsView(BoostAssignmentView):
             if added_role:
                 try:
                     await member.remove_roles(
-                        role, reason="Falha ao registrar associação no NeonDB"
+                        role, reason="Falha ao registrar associação no banco de dados"
                     )
                 except discord.HTTPException:
                     pass
@@ -213,7 +213,7 @@ class BoostAssignmentDetailsView(BoostAssignmentView):
                 flush=True,
             )
             return await interaction.response.send_message(
-                "Não consegui salvar a associação no NeonDB. Consulte os logs do bot.",
+                "Não consegui salvar a associação no banco de dados. Consulte os logs do bot.",
                 ephemeral=True,
             )
 

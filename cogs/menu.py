@@ -9,12 +9,12 @@ from io import BytesIO
 from pathlib import Path
 
 import aiohttp
-import asyncpg
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from .components_v2 import ComponentsV2View, components_v2
+from .database import Pool, create_pool
 from .quotes import (
     DEFAULT_QUOTE_STYLE,
     FONT_URLS,
@@ -2127,7 +2127,7 @@ class Menu(commands.Cog):
         self.bot = bot
         self.config: dict[str, dict] = {}
         self.invites: dict[int, str] = {}
-        self.pool: asyncpg.Pool | None = None
+        self.pool: Pool | None = None
         self.message_cache: OrderedDict[
             tuple[int, int, int], discord.Message
         ] = OrderedDict()
@@ -2511,23 +2511,14 @@ class Menu(commands.Cog):
             except (OSError, json.JSONDecodeError) as error:
                 print(f"Não foi possível carregar as configurações locais: {error}")
 
-        database_url = os.getenv("DATABASE") or os.getenv("DATABASE_URL")
-        if not database_url:
-            return
         try:
-            self.pool = await asyncpg.create_pool(
-                dsn=database_url,
-                ssl="require",
-                min_size=1,
-                max_size=3,
-                command_timeout=20,
-            )
+            self.pool = await create_pool()
             await self.pool.execute(
                 """
                 CREATE TABLE IF NOT EXISTS hakari_guild_config (
                     guild_id BIGINT PRIMARY KEY,
-                    config JSONB NOT NULL,
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    config TEXT NOT NULL,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
@@ -2537,8 +2528,8 @@ class Menu(commands.Cog):
                     guild_id BIGINT NOT NULL,
                     asset_key TEXT NOT NULL,
                     filename TEXT NOT NULL,
-                    data BYTEA NOT NULL,
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    data BLOB NOT NULL,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (guild_id, asset_key)
                 )
                 """
@@ -2547,7 +2538,7 @@ class Menu(commands.Cog):
                 await self.pool.executemany(
                     """
                     INSERT INTO hakari_guild_config (guild_id, config)
-                    VALUES ($1, $2::jsonb)
+                    VALUES ($1, $2)
                     ON CONFLICT (guild_id) DO NOTHING
                     """,
                     [
@@ -2586,10 +2577,10 @@ class Menu(commands.Cog):
                 await self.pool.executemany(
                     """
                     INSERT INTO hakari_guild_config (guild_id, config)
-                    VALUES ($1, $2::jsonb)
+                    VALUES ($1, $2)
                     ON CONFLICT (guild_id) DO UPDATE SET
                         config = EXCLUDED.config,
-                        updated_at = NOW()
+                        updated_at = CURRENT_TIMESTAMP
                     """,
                     [
                         (int(guild_id), json.dumps(value))
@@ -2771,7 +2762,7 @@ class Menu(commands.Cog):
                 ON CONFLICT (guild_id, asset_key) DO UPDATE SET
                     filename = EXCLUDED.filename,
                     data = EXCLUDED.data,
-                    updated_at = NOW()
+                    updated_at = CURRENT_TIMESTAMP
                 """,
                 guild_id,
                 asset_key,
