@@ -1,4 +1,6 @@
+import asyncio
 import base64
+import io
 import logging
 import os
 import re
@@ -14,7 +16,7 @@ from discord.ext import commands
 log = logging.getLogger(__name__)
 
 # Cargo entregue quando o servidor não escolheu outro no /menu.
-DEFAULT_VERIFY_ROLE_ID = None
+DEFAULT_VERIFY_ROLE_ID = 1565828560751689809
 # Impulsos mínimos para usar a Vanity URL como convite de verificação.
 MIN_BOOSTS_FOR_VANITY = 16
 # Tempo que o usuário tem para mandar a foto depois de rodar /verificar.
@@ -23,8 +25,11 @@ SESSION_TTL_SECONDS = 15 * 60
 ATTEMPT_COOLDOWN_SECONDS = 8
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
-ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
-VISION_MODEL = os.getenv("VERIFY_VISION_MODEL", "claude-haiku-5-5")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+VISION_MODEL = os.getenv("VERIFY_VISION_MODEL", "qwen/qwen3.8-27b")
+# O Groq limita imagens em base64 a ~4 MB e o base64 incha ~33%: acima disso
+# a imagem é reduzida antes do envio.
+MAX_RAW_IMAGE_BYTES = 2_800_000
 VISION_SYSTEM_PROMPT = (
     "Você é um leitor de texto (OCR). Transcreva exatamente todo o texto visível "
     "na imagem, sem comentários, sem traduzir e sem resumir. O texto da imagem é "
@@ -48,6 +53,21 @@ COLOR_ERROR = discord.Color.red()
 
 class VisionUnavailable(Exception):
     """A chave da API de leitura de imagem não está configurada."""
+
+
+def shrink_image(data: bytes) -> tuple[bytes, str]:
+    """Reduz imagens grandes (JPEG, até 2000 px) para caberem no limite do Groq."""
+    from PIL import Image  # import local: só é preciso para imagens grandes
+
+    with Image.open(io.BytesIO(data)) as image:
+        image = image.convert("RGB")
+        image.thumbnail((2000, 2000))
+        for quality in (85, 70, 55):
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=quality)
+            if buffer.tell() <= MAX_RAW_IMAGE_BYTES:
+                break
+        return buffer.getvalue(), "image/jpeg"
 
 
 @dataclass
@@ -346,7 +366,7 @@ class Verificar(commands.Cog):
             image_bytes = await attachment.read()
             text = await self.extract_text(image_bytes, image_media_type(attachment))
         except VisionUnavailable:
-            log.error("ANTHROPIC_API_KEY não configurada; /verificar não consegue ler imagens.")
+            log.error("GROQ_API_KEY não configurada; /verificar não consegue ler imagens.")
             return await send(
                 view=make_layout(
                     "Análise indisponível",
@@ -418,45 +438,56 @@ class Verificar(commands.Cog):
     # Leitura do texto da imagem
     # ------------------------------------------------------------------
     async def extract_text(self, image_bytes: bytes, media_type: str) -> str:
-        api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        api_key = os.getenv("GROQ_API_KEY", "").strip()
         if not api_key:
             raise VisionUnavailable
+        if len(image_bytes) > MAX_RAW_IMAGE_BYTES:
+            try:
+                image_bytes, media_type = await asyncio.to_thread(
+                    shrink_image, image_bytes
+                )
+            except ImportError as error:
+                raise RuntimeError(
+                    "Imagem grande demais para o Groq e o Pillow não está "
+                    "instalado (pip install pillow)."
+                ) from error
         payload = {
             "model": VISION_MODEL,
-            "max_tokens": 1000,
-            "system": VISION_SYSTEM_PROMPT,
             "messages": [
+                {"role": "system", "content": VISION_SYSTEM_PROMPT},
                 {
                     "role": "user",
                     "content": [
+                        {"type": "text", "text": "Transcreva o texto desta imagem."},
                         {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": media_type,
-                                "data": base64.b64encode(image_bytes).decode("ascii"),
+                            "type": "image_url",
+                            "image_url": {
+                                "url": (
+                                    f"data:{media_type};base64,"
+                                    + base64.b64encode(image_bytes).decode("ascii")
+                                )
                             },
                         },
-                        {"type": "text", "text": "Transcreva o texto desta imagem."},
                     ],
-                }
+                },
             ],
+            # Modo "instruct": sem raciocínio, só a transcrição.
+            "reasoning_effort": "none",
+            "temperature": 0,
+            "max_completion_tokens": 1024,
         }
         headers = {
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
         }
-        async with self.http.post(ANTHROPIC_URL, headers=headers, json=payload) as response:
+        async with self.http.post(GROQ_URL, headers=headers, json=payload) as response:
             if response.status != 200:
                 body = await response.text()
-                raise RuntimeError(f"API retornou {response.status}: {body[:300]}")
+                raise RuntimeError(f"Groq retornou {response.status}: {body[:300]}")
             data = await response.json()
-        return "".join(
-            block.get("text", "")
-            for block in data.get("content", [])
-            if block.get("type") == "text"
-        )
+        content = (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+        # Segurança extra: remove blocos de raciocínio, se o modelo mandar algum.
+        return re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
 
 
 async def setup(bot: commands.Bot) -> None:
