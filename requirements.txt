@@ -6,3 +6,4 @@ flask
 asyncpg
 aiohttp
 Pillow
+pytesseract>=0.3.10

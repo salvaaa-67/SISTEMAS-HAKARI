@@ -191,6 +191,7 @@ MODULES = {
     "roblox": "Avatares Roblox",
     "ia_audio": "IA em áudio",
     "levels": "Sistema de XP e Níveis",
+    "verificar": "Verificação por bio",
 }
 
 SETTINGS = {
@@ -301,7 +302,7 @@ SETTINGS = {
         "items": {
             f"module_{module}": (f"Ativar {label}", "toggle")
             for module, label in MODULES.items()
-            if module != "ia_audio"
+            if module not in {"ia_audio", "verificar"}
         },
     },
     "ia_audio": {
@@ -313,6 +314,22 @@ SETTINGS = {
         "items": {
             "module_ia_audio": ("Ativar respostas de IA em áudio", "toggle"),
             "ia_audio_voice_id": ("Escolher voz Fish Audio", "fish_voices"),
+        },
+    },
+    "verificar": {
+        "label": "Verificação por bio",
+        "description": (
+            "O /verificar entrega um cargo a quem enviar na DM uma foto da bio "
+            "com o convite do servidor. Sem cargo escolhido, usa o cargo padrão."
+        ),
+        "items": {
+            "module_verificar": ("Ativar o comando /verificar", "toggle"),
+            "verificar_role": ("Cargo entregue na verificação", "role"),
+            "verificar_use_vanity": (
+                "Usar a Vanity URL (exige 16 impulsos)",
+                "toggle",
+            ),
+            "verificar_invite": ("Convite manual (se não usar Vanity)", "text"),
         },
     },
     "logs": {
@@ -482,6 +499,38 @@ class NumberSettingModal(discord.ui.Modal):
         await self.menu.set_value(self.guild_id, self.key, value)
         await interaction.response.send_message(
             f"Configuração salva: **{value}**.", ephemeral=True
+        )
+
+
+class TextSettingModal(discord.ui.Modal):
+    def __init__(self, menu: "Menu", guild_id: int, key: str, label: str):
+        super().__init__(title=f"Configurar {label}"[:45])
+        self.menu = menu
+        self.guild_id = guild_id
+        self.key = key
+        self.value_input = discord.ui.TextInput(
+            label=label[:45],
+            default=str(menu.get_value(guild_id, key, "") or "")[:100],
+            placeholder="Ex.: discord.gg/seuservidor",
+            max_length=100,
+            required=False,
+        )
+        self.add_item(self.value_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        value = self.value_input.value.strip()
+        if self.key == "verificar_invite" and value:
+            code = value.rstrip("/").split("/")[-1]
+            if not re.fullmatch(r"[A-Za-z0-9_-]{2,32}", code):
+                return await interaction.response.send_message(
+                    "Informe um convite válido, como `discord.gg/seuservidor`.",
+                    ephemeral=True,
+                )
+            value = code
+        await self.menu.set_value(self.guild_id, self.key, value or None)
+        await interaction.response.send_message(
+            f"Configuração salva: `{value}`." if value else "Configuração removida.",
+            ephemeral=True,
         )
 
 
@@ -832,6 +881,8 @@ class SettingSelect(discord.ui.Select):
                         "quotes_style",
                         "fish_voices",
                     }
+                    else "Informe o texto usado por este módulo."
+                    if kind == "text"
                     else "Defina o valor numérico desta configuração."
                     if kind == "number"
                     else f"Tipo: {kind}"
@@ -1460,6 +1511,18 @@ class NumberSettingButton(discord.ui.Button):
         label = SETTINGS[view.category]["items"][view.setting][0]
         await interaction.response.send_modal(
             NumberSettingModal(view.menu, interaction.guild_id, view.setting, label)
+        )
+
+
+class TextSettingButton(discord.ui.Button):
+    def __init__(self, view: "MenuView", label: str):
+        super().__init__(label=f"Definir: {label}"[:80], style=discord.ButtonStyle.primary)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view: MenuView = self.view
+        label = SETTINGS[view.category]["items"][view.setting][0]
+        await interaction.response.send_modal(
+            TextSettingModal(view.menu, interaction.guild_id, view.setting, label)
         )
 
 
@@ -2102,6 +2165,9 @@ class MenuView(ComponentsV2View):
             elif kind == "number":
                 label = SETTINGS[self.category]["items"][self.setting][0]
                 self.add_item(NumberSettingButton(self, label))
+            elif kind == "text":
+                label = SETTINGS[self.category]["items"][self.setting][0]
+                self.add_item(TextSettingButton(self, label))
             elif kind == "welcome_text":
                 self.add_item(WelcomeTextButton())
             elif kind == "welcome_assets":
@@ -2868,6 +2934,11 @@ class Menu(commands.Cog):
             return bool(
                 self.get_value(guild_id, "welcome_channel")
                 and self.get_value(guild_id, "welcome_embed_description")
+            )
+        if module == "verificar":
+            return bool(
+                self.get_value(guild_id, "verificar_use_vanity", False)
+                or self.get_value(guild_id, "verificar_invite")
             )
         if module == "insta":
             return bool(self.get_value(guild_id, "insta_channel"))
