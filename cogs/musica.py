@@ -5,6 +5,7 @@ import os
 import shlex
 import shutil
 import tempfile
+import traceback
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -129,32 +130,41 @@ def describe_youtube_error(error: Exception) -> str:
     message = str(error)
     normalized_message = message.lower().replace("’", "'")
 
+    print(f"[LOG DE ERRO DO PLAYER/YTDLP]: {type(error).__name__}: {message}", flush=True)
+    traceback.print_exc()
+
     if "confirm you're not a bot" in normalized_message:
         cookie_file = os.getenv("YOUTUBE_COOKIES_FILE", "").strip()
         if not cookie_file:
             return (
                 "O YouTube exigiu autenticação, mas YOUTUBE_COOKIES_FILE "
-                "não está definida no processo do bot. Configure no Render "
-                "o caminho de um Secret File em formato Netscape e reinicie."
+                "não está definida no processo do bot."
             )
         if not Path(cookie_file).is_file():
             return (
                 "YOUTUBE_COOKIES_FILE está definida, mas o arquivo não foi "
-                "encontrado no servidor. Confira o Secret File e o caminho."
+                "encontrado no servidor."
             )
         return (
-            "O arquivo de cookies foi encontrado, mas o YouTube ainda os "
-            "recusou. Exporte cookies Netscape recentes de uma sessão "
-            "conectada ao YouTube e atualize o Secret File no Render."
+            "O arquivo de cookies foi encontrado, mas o YouTube os "
+            "recusou. Atualize os cookies Netscape recentes."
         )
 
     if isinstance(error, FileNotFoundError):
         return (
-            "O arquivo de cookies configurado não foi encontrado no servidor. "
-            "Confira o caminho de YOUTUBE_COOKIES_FILE."
+            "O arquivo de cookies configurado não foi encontrado no servidor."
         )
 
-    return message
+    if "sign in to confirm your age" in normalized_message or "age-restricted" in normalized_message:
+        return "Esta música possui restrição de idade no YouTube e não pode ser reproduzida."
+
+    if "video unavailable" in normalized_message or "unavailable" in normalized_message:
+        return "Este vídeo ou música está indisponível ou foi removido."
+
+    if "copyright" in normalized_message:
+        return "Esta música foi bloqueada devido a direitos autorais."
+
+    return f"Erro ao processar áudio: {message}"
 
 
 @dataclass
@@ -172,6 +182,7 @@ class Track:
 @dataclass
 class MusicState:
     queue: list[Track] = field(default_factory=list)
+    history: list[Track] = field(default_factory=list)
     current: Track | None = None
     worker: asyncio.Task | None = None
     generation: int = 0
@@ -183,6 +194,7 @@ class MusicState:
     last_failed_track: Track | None = None
     pcm_peak: int | None = None
     pcm_rms: float | None = None
+    loop: bool = False
 
 
 def format_duration(seconds: float | None) -> str:
@@ -261,6 +273,90 @@ def extract_track(query: str) -> Track:
     )
 
 
+def extract_playlist_tracks(url: str) -> list[Track]:
+    options = YTDL_OPTIONS.copy()
+    options['noplaylist'] = False
+    cookie_file = os.getenv("YOUTUBE_COOKIES_FILE", "").strip()
+    temporary_cookie_file = None
+
+    try:
+        if cookie_file:
+            source_cookie_file = Path(cookie_file)
+            if not source_cookie_file.is_file():
+                raise FileNotFoundError("O arquivo de cookies configurado não existe.")
+
+            with tempfile.NamedTemporaryFile(
+                prefix="youtube-cookies-", suffix=".txt", delete=False
+            ) as temporary_file:
+                temporary_cookie_file = Path(temporary_file.name)
+                temporary_file.write(source_cookie_file.read_bytes())
+
+            options["cookiefile"] = str(temporary_cookie_file)
+
+        with yt_dlp.YoutubeDL(options) as ytdl:
+            result = ytdl.extract_info(url, download=False)
+    finally:
+        if temporary_cookie_file:
+            temporary_cookie_file.unlink(missing_ok=True)
+
+    if result is None:
+        raise ValueError("Não foi possível carregar os dados desta playlist.")
+
+    entries = result.get("entries")
+    if entries is None:
+        webpage_url = result.get("webpage_url") or result.get("original_url")
+        if not webpage_url:
+            raise ValueError("Não foi possível obter o link da faixa.")
+        return [
+            Track(
+                title=result.get("title") or "Música sem título",
+                url=webpage_url,
+                requested_by="",
+                text_channel_id=0,
+                artist=str(
+                    result.get("artist")
+                    or result.get("creator")
+                    or result.get("uploader")
+                    or result.get("channel")
+                    or "Desconhecido"
+                ),
+                duration=result.get("duration"),
+                thumbnail=result.get("thumbnail"),
+            )
+        ]
+
+    tracks = []
+    for entry in entries:
+        if entry is None:
+            continue
+        webpage_url = entry.get("webpage_url") or entry.get("original_url")
+        if not webpage_url:
+            video_id = entry.get("id")
+            if video_id:
+                webpage_url = f"https://www.youtube.com/watch?v={video_id}"
+            else:
+                continue
+
+        tracks.append(
+            Track(
+                title=entry.get("title") or "Música sem título",
+                url=webpage_url,
+                requested_by="",
+                text_channel_id=0,
+                artist=str(
+                    entry.get("artist")
+                    or entry.get("creator")
+                    or entry.get("uploader")
+                    or entry.get("channel")
+                    or "Desconhecido"
+                ),
+                duration=entry.get("duration"),
+                thumbnail=entry.get("thumbnail"),
+            )
+        )
+    return tracks
+
+
 def extract_audio_url(url: str) -> tuple[str, dict[str, str]]:
     with youtube_dl_instance() as ytdl:
         result = ytdl.extract_info(url, download=False)
@@ -276,10 +372,105 @@ def extract_audio_url(url: str) -> tuple[str, dict[str, str]]:
 
     audio_url = result.get("url") if result else None
     if not audio_url:
-        raise ValueError("O YouTube não retornou um endereço de áudio.")
+        raise ValueError("O servidor não retornou um endereço de áudio válido.")
 
     audio_headers = result.get("http_headers") or {}
     return audio_url, audio_headers
+
+
+class MusicLoopModal(discord.ui.Modal, title="Tocar uma música em Loop"):
+    query = discord.ui.TextInput(
+        label="Nome ou Link da Música",
+        placeholder="Digite o nome ou link da música...",
+        required=True,
+        max_length=200,
+    )
+
+    def __init__(self, cog: "Music", guild: discord.Guild, text_channel_id: int):
+        super().__init__()
+        self.cog = cog
+        self.guild = guild
+        self.text_channel_id = text_channel_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        query_str = self.query.value
+
+        try:
+            track = await asyncio.to_thread(extract_track, query_str)
+        except Exception as error:
+            print(f"[ERRO AO BUSCAR MÚSICA EM LOOP] {error}", flush=True)
+            traceback.print_exc()
+            await interaction.followup.send(
+                f"<:wrong:1554659471223947324> Não achei a música especificada: {describe_youtube_error(error)}",
+                ephemeral=True,
+            )
+            return
+
+        voice = self.guild.voice_client
+        if voice is None or not voice.is_connected():
+            if interaction.user.voice and interaction.user.voice.channel:
+                try:
+                    voice = await interaction.user.voice.channel.connect()
+                except Exception as e:
+                    print(f"[ERRO DE CONEXÃO DE VOZ] {e}", flush=True)
+                    await interaction.followup.send(
+                        "<:wrong:1554659471223947324> Não foi possível conectar ao canal de voz.",
+                        ephemeral=True,
+                    )
+                    return
+            else:
+                await interaction.followup.send(
+                    "<:wrong:1554659471223947324> Você precisa estar em um canal de voz.",
+                    ephemeral=True,
+                )
+                return
+
+        track.requested_by = interaction.user.mention
+        track.text_channel_id = self.text_channel_id
+        state = self.cog._state_for(self.guild.id)
+        state.loop = True
+        state.queue.append(track)
+
+        if state.worker is None or state.worker.done():
+            state.worker = asyncio.create_task(self.cog._play_queue(self.guild, state))
+
+        await interaction.followup.send(
+            "<:correct:1554659481512841267> Música encontrada e colocada em modo loop!",
+            ephemeral=True,
+        )
+
+
+class EndOfQueueView(discord.ui.View):
+    def __init__(self, cog: "Music", guild: discord.Guild, text_channel_id: int):
+        super().__init__(timeout=None)
+        self.cog = cog
+        self.guild = guild
+        self.text_channel_id = text_channel_id
+
+    @discord.ui.button(label="Tocar desde o Início", style=discord.ButtonStyle.green, custom_id="play_from_start")
+    async def play_from_start(self, interaction: discord.Interaction, button: discord.ui.Button):
+        state = self.cog._state_for(self.guild.id)
+        if not state.history:
+            await interaction.response.send_message(
+                "<:wrong:1554659471223947324> Não há histórico de músicas anteriores.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer()
+        state.queue = list(state.history)
+        if state.worker is None or state.worker.done():
+            state.worker = asyncio.create_task(self.cog._play_queue(self.guild, state))
+
+        await interaction.followup.send(
+            "<:correct:1554659481512841267> Reproduzindo novamente a primeira música e as seguintes do histórico!"
+        )
+
+    @discord.ui.button(label="Tocar uma música em Loop", style=discord.ButtonStyle.blurple, custom_id="play_loop_modal")
+    async def play_loop_modal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = MusicLoopModal(self.cog, self.guild, self.text_channel_id)
+        await interaction.response.send_modal(modal)
 
 
 class Music(commands.Cog):
@@ -405,6 +596,9 @@ class Music(commands.Cog):
             state.pcm_rms = None
             channel = self.bot.get_channel(track.text_channel_id)
 
+            if not state.history or state.history[-1].url != track.url:
+                state.history.append(track)
+
             try:
                 audio_url, audio_headers = await asyncio.to_thread(
                     extract_audio_url,
@@ -441,7 +635,8 @@ class Music(commands.Cog):
 
                 def after(error: Exception | None) -> None:
                     if error:
-                        print(f"Erro ao reproduzir áudio: {error}", flush=True)
+                        print(f"[ERRO DE ÁUDIO] Erro ao reproduzir: {error}", flush=True)
+                        traceback.print_exc()
                     self.bot.loop.call_soon_threadsafe(finished.set)
 
                 monitored_source = AudioLevelMonitor(source, record_audio_levels)
@@ -468,15 +663,20 @@ class Music(commands.Cog):
                         f"<a:MusicNotes:1554875954281717761> **{track.title}**"
                     )
                 await finished.wait()
+
+                if state.loop and generation == state.generation:
+                    state.queue.insert(0, track)
+
             except asyncio.CancelledError:
                 raise
             except Exception as error:
                 state.last_error = f"{type(error).__name__}: {error}"
                 state.last_failed_track = track
                 print(
-                    f"Erro ao reproduzir '{track.title}': {error}",
+                    f"[ERRO] Falha ao reproduzir '{track.title}': {error}",
                     flush=True,
                 )
+                traceback.print_exc()
                 if channel:
                     await channel.send(
                         f"<:wrong:1554659471223947324> Não consegui reproduzir "
@@ -491,9 +691,24 @@ class Music(commands.Cog):
 
         if not state.queue:
             state.worker = None
+            if state.history:
+                last_channel_id = state.history[-1].text_channel_id
+                channel = self.bot.get_channel(last_channel_id)
+                if channel:
+                    embed = discord.Embed(
+                        title="🎵 Fila Encerrada",
+                        description="Todas as músicas acabaram. Escolha uma das opções abaixo:",
+                        color=discord.Color.blue(),
+                        timestamp=discord.utils.utcnow(),
+                    )
+                    view = EndOfQueueView(self, guild, last_channel_id)
+                    try:
+                        await channel.send(embed=embed, view=view)
+                    except Exception as e:
+                        print(f"[ERRO AO ENVIAR EMBED DE FIM DE FILA] {e}", flush=True)
 
-    @app_commands.command(name="play", description="Toca uma música do YouTube")
-    @app_commands.describe(busca="Link do YouTube ou nome da música")
+    @app_commands.command(name="play", description="Toca uma música")
+    @app_commands.describe(busca="Link ou nome da música")
     async def play(self, interaction: discord.Interaction, busca: str) -> None:
         if interaction.guild is None:
             await interaction.response.send_message(
@@ -514,6 +729,8 @@ class Music(commands.Cog):
         try:
             track = await asyncio.to_thread(extract_track, busca)
         except Exception as error:
+            print(f"[ERRO NO PLAY] {error}", flush=True)
+            traceback.print_exc()
             await interaction.followup.send(
                 f"<:wrong:1554659471223947324> Não encontrei essa música: "
                 f"{describe_youtube_error(error)}"
@@ -530,6 +747,7 @@ class Music(commands.Cog):
                 )
                 return
         except (discord.ClientException, discord.HTTPException) as error:
+            print(f"[ERRO DE VOZ NO PLAY] {error}", flush=True)
             await interaction.followup.send(
                 f"<:wrong:1554659471223947324> Não consegui entrar no canal: {error}"
             )
@@ -549,6 +767,97 @@ class Music(commands.Cog):
             interaction.created_at,
         )
         await interaction.followup.send(view=components_v2(embed))
+
+    @app_commands.command(name="loop", description="Deixa a música atual em loop, até rodar o comando de novo")
+    async def loop(self, interaction: discord.Interaction) -> None:
+        voice = await self._get_requester_voice(interaction)
+        if voice is None:
+            return
+
+        state = self._state_for(interaction.guild.id)
+        state.loop = not state.loop
+        status = "ativado"
+        emoji = "<:correct:1554659481512841267>"
+        if not state.loop:
+            status = "desativado"
+            emoji = "<:wrong:1554659471223947324>"
+
+        await interaction.response.send_message(
+            f"{emoji} O modo **loop** foi **{status}** para a música atual."
+        )
+
+    importar_group = app_commands.Group(name="importar", description="Comandos para importar playlists")
+
+    @importar_group.command(name="playlist", description="Importa uma playlist externa (SoundCloud, Deezer, Spotify, etc.)")
+    @app_commands.describe(link="Link da playlist externa")
+    async def importar_playlist(self, interaction: discord.Interaction, link: str) -> None:
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                "<:wrong:1554659471223947324> Esse comando só funciona dentro de um servidor.",
+                ephemeral=True,
+            )
+            return
+
+        if not isinstance(interaction.user, discord.Member) or interaction.user.voice is None:
+            await interaction.response.send_message(
+                "<:wrong:1554659471223947324> Entre em um canal de voz primeiro.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer()
+
+        try:
+            tracks = await asyncio.to_thread(extract_playlist_tracks, link)
+        except Exception as error:
+            print(f"[ERRO AO IMPORTAR PLAYLIST] {error}", flush=True)
+            traceback.print_exc()
+            await interaction.followup.send(
+                f"<:wrong:1554659471223947324> Não foi possível importar a playlist: {describe_youtube_error(error)}"
+            )
+            return
+
+        if not tracks:
+            await interaction.followup.send(
+                "<:wrong:1554659471223947324> Nenhuma música foi encontrada nesta playlist."
+            )
+            return
+
+        try:
+            voice = interaction.guild.voice_client
+            if voice is None:
+                voice = await interaction.user.voice.channel.connect()
+            elif voice.channel != interaction.user.voice.channel:
+                await interaction.followup.send(
+                    "<:wrong:1554659471223947324> Você precisa estar no mesmo canal de voz que eu."
+                )
+                return
+        except (discord.ClientException, discord.HTTPException) as error:
+            print(f"[ERRO DE VOZ AO IMPORTAR] {error}", flush=True)
+            await interaction.followup.send(
+                f"<:wrong:1554659471223947324> Não consegui entrar no canal: {error}"
+            )
+            return
+
+        state = self._state_for(interaction.guild.id)
+        added_count = 0
+        for track in tracks:
+            track.requested_by = interaction.user.mention
+            track.text_channel_id = interaction.channel_id
+            state.queue.append(track)
+            added_count += 1
+
+        if state.worker is None or state.worker.done():
+            state.worker = asyncio.create_task(self._play_queue(interaction.guild, state))
+
+        embed = discord.Embed(
+            title="📥 Playlist Importada",
+            description=f"Foram adicionadas **{added_count}** músicas à fila.",
+            color=discord.Color.green(),
+            timestamp=interaction.created_at,
+        )
+        embed.set_footer(text=f"Importado por {interaction.user.display_name}")
+        await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="pause", description="Pausa a música atual")
     async def pause(self, interaction: discord.Interaction) -> None:
@@ -734,7 +1043,7 @@ class Music(commands.Cog):
             color=discord.Color.green(),
             timestamp=interaction.created_at,
         )
-        embed.add_field(name="Fornecedor", value="SoundCloud", inline=True)
+        embed.add_field(name="Fornecedor", value="SoundCloud / YouTube", inline=True)
         embed.add_field(
             name="Qualidade",
             value="256 Kbps · Áudio de qualidade ótima",
@@ -745,7 +1054,7 @@ class Music(commands.Cog):
             value=f"{latency_ms:.0f} ms",
             inline=True,
         )
-        embed.add_field(name="Estado do SoundCloud", value=player_status, inline=True)
+        embed.add_field(name="Estado do Player", value=player_status, inline=True)
         embed.add_field(
             name="Canal de voz",
             value=voice.channel.mention if voice and voice.is_connected() else "Nenhum",
@@ -754,14 +1063,9 @@ class Music(commands.Cog):
         embed.add_field(
             name="Comandos de música",
             value=(
-                "`/play` · `/pause` · `/resume` · `/skip` · `/stop`\n"
-                "`/volume` · `/queue` · `/leave` · `/autofix` · `/infoplayer`"
+                "`/play` · `/loop` · `/importar playlist` · `/pause` · `/resume`\n"
+                "`/skip` · `/stop` · `/volume` · `/queue` · `/leave` · `/autofix`"
             ),
-            inline=False,
-        )
-        embed.add_field(
-            name="Auto recuperação",
-            value="Se o bot travar, use `/autofix` para tentar consertar o player.",
             inline=False,
         )
         embed.set_footer(text=f"Solicitado por {interaction.user.display_name}")
@@ -807,7 +1111,7 @@ class Music(commands.Cog):
         except (discord.ClientException, discord.HTTPException) as error:
             await interaction.followup.send(
                 "<:wrong:1554659471223947324> Não consegui recuperar a conexão de voz. "
-                f"Chame o desenvolvedor para corrigir. ({error})",
+                f"({error})",
                 ephemeral=True,
             )
             return
@@ -829,11 +1133,10 @@ class Music(commands.Cog):
 
         if track_to_retry is not None:
             if track_to_retry.recovery_attempts >= 1:
-                detail = state.last_error or "a faixa continuou sem áudio após a retentativa"
+                detail = state.last_error or "a faixa continuou sem áudio"
                 await interaction.followup.send(
                     "<:wrong:1554659471223947324> O player já tentou recuperar "
-                    "essa faixa uma vez, mas não "
-                    f"conseguiu. Chame o desenvolvedor para corrigir. ({detail})",
+                    f"essa faixa anteriormente. ({detail})",
                     ephemeral=True,
                 )
                 return
@@ -841,8 +1144,7 @@ class Music(commands.Cog):
             await self._restart_track(guild, state, voice, track_to_retry)
             await interaction.followup.send(
                 f"Player recuperado; reiniciei "
-                f"<a:MusicNotes:1554875954281717761> **{track_to_retry.title}** "
-                "uma vez para testar o áudio.",
+                f"<a:MusicNotes:1554875954281717761> **{track_to_retry.title}**.",
                 ephemeral=True,
             )
             return
@@ -850,30 +1152,14 @@ class Music(commands.Cog):
         if state.queue and (state.worker is None or state.worker.done()):
             state.worker = asyncio.create_task(self._play_queue(guild, state))
             await interaction.followup.send(
-                "Encontrei músicas na fila sem um processo ativo e reiniciei o player.",
+                "Encontrei músicas na fila sem processo ativo e reiniciei o player.",
                 ephemeral=True,
             )
             return
 
         if state.preparing:
             await interaction.followup.send(
-                "O player está carregando a faixa. Aguarde alguns segundos e verifique novamente.",
-                ephemeral=True,
-            )
-            return
-
-        if voice.is_playing() and state.pcm_rms is not None and state.pcm_rms >= 50:
-            await interaction.followup.send(
-                "A conexão e o stream estão ativos, e o player está recebendo áudio. "
-                "Não encontrei uma falha que possa corrigir automaticamente; "
-                "se continuar sem som, chame o desenvolvedor.",
-                ephemeral=True,
-            )
-            return
-
-        if voice.is_paused():
-            await interaction.followup.send(
-                "O player está pausado intencionalmente; use `/resume` para continuar.",
+                "O player está carregando a faixa. Aguarde alguns segundos.",
                 ephemeral=True,
             )
             return
@@ -881,7 +1167,7 @@ class Music(commands.Cog):
         result = (
             "Conexão de voz restaurada. Não há música tocando agora."
             if connection_repaired
-            else "Não encontrei erro ativo no player nem uma faixa para recuperar."
+            else "Não encontrei erro ativo no player."
         )
         await interaction.followup.send(result, ephemeral=True)
 
@@ -901,9 +1187,10 @@ class Music(commands.Cog):
 
         lines = []
         if state.current:
+            loop_status = " 🔂 (Loop Ativado)" if state.loop else ""
             lines.append(
                 f"▶️ Tocando: <a:MusicNotes:1554875954281717761> "
-                f"**{state.current.title}**"
+                f"**{state.current.title}**{loop_status}"
             )
         lines.extend(
             f"{index}. <a:MusicNotes:1554875954281717761> {track.title} "
