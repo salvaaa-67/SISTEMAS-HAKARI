@@ -323,14 +323,16 @@ async def trocar_status() -> None:
 
         # A lista fica aqui dentro para calcular a latência atual a cada 35s
         status_atualizados = [
-            "Hakari Bot V2.21.6",
-            "Desenvolvido por Salvador",
-            f"Latência: {round(bot.latency * 1000)}ms",
-            f"Atualmente tendo {total_cogs} sistemas ativos",
-            "Use /menu para me configurar! As alterações valem apenas para o seu servidor",
-            "Minha linguagem é PYTHON, e a sua?",
-            "Sim, tudo tem que configurar no /menu primeiro para depooooois usar 😭",
-            "A música favorita do meu desenvolvedor é Flamewall de Camellia, e a sua?"
+            "feito por salvador, asta, salvador... ESSE CARA AI TLGD, TROCA DE NOME TODA HORA, pqp",
+            f"latencia: {round(bot.latency * 1000)}ms, acima de 100 pode se preocupar ja",
+            f"carai antes eu era um bot simples e agora eu tenho {total_cogs} sistemas ativos nesse exato momento, W",
+            "como e que ta a movimentaçao do grupo ai",
+            "ser um bot e legal sabia",
+            "papo de passa fome",
+            "seu @1 tem que namorar com voce por 5 anos(se nao ele te odeia)",
+            "ok google como fazer um bolo de cenoura sem cenoura",
+            "viado eu nunca vi como é ser um usuário do discord e interagir com a galera",
+            "To afirmemos, Afirmando vc né gata, Pq firma que não Airton"
         ]
 
         await bot.change_presence(
