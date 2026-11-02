@@ -66,9 +66,9 @@ class AutoMod(commands.Cog):
         )
 
         presets = (
-            discord.AutoModPresets.profanity,
-            discord.AutoModPresets.sexual_content,
-            discord.AutoModPresets.slurs,
+            discord.AutoModPresets(profanity=True),
+            discord.AutoModPresets(sexual_content=True),
+            discord.AutoModPresets(slurs=True),
         )
         add_rule(
             discord.AutoModRuleEventType.message_send,
