@@ -146,14 +146,14 @@ class AutoMod(commands.Cog):
                         reason="Lote de teste AutoMod solicitado pelo dono do bot.",
                     )
                     created_rules.append(rule)
-            except discord.HTTPException as error:
+            except Exception as error:
                 rollback_failures = []
                 for rule in reversed(created_rules):
                     try:
                         await rule.delete(
                             reason="Reversão do lote incompleto de teste AutoMod."
                         )
-                    except discord.HTTPException as rollback_error:
+                    except Exception as rollback_error:
                         rollback_failures.append(str(rollback_error))
                         log.exception(
                             "Falha ao reverter regra AutoMod %s no servidor %s",
@@ -162,7 +162,7 @@ class AutoMod(commands.Cog):
                         )
 
                 status = (
-                    f"falha ao criar regras ({error}); "
+                    f"falha ao criar regras ({type(error).__name__}: {error}); "
                     f"{len(created_rules) - len(rollback_failures)} revertidas"
                 )
                 if rollback_failures:
@@ -171,7 +171,7 @@ class AutoMod(commands.Cog):
                         "— consulte os logs"
                     )
                 log.warning("AutoMod em %s: %s", guild.id, status)
-                return guild.name, status, 0
+                return guild.name, status, len(rollback_failures)
 
             return guild.name, "10 regras criadas", len(created_rules)
 
