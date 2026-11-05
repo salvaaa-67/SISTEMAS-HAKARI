@@ -66,7 +66,7 @@ def home():
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#F7F2EA" />
   <meta name="description" content="Status do bot HAKARI em tempo real." />
   <title>HAKARI | Central de Status</title>
@@ -95,13 +95,19 @@ def home():
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
     body {
       min-height: 100vh;
+      min-height: 100dvh;
       background-color: var(--bg-base);
       color: var(--text-primary);
       font-family: 'JetBrains Mono', monospace;
       -webkit-font-smoothing: antialiased;
       padding: 20px;
+      padding-left: max(20px, env(safe-area-inset-left));
+      padding-right: max(20px, env(safe-area-inset-right));
+      padding-bottom: max(20px, env(safe-area-inset-bottom));
       overflow-x: hidden;
     }
 
@@ -114,7 +120,7 @@ def home():
 
     /* --- Métricas Topo --- */
     .top-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
-    .metric-panel { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 18px; box-shadow: var(--shadow-sm); position: relative; }
+    .metric-panel { min-width: 0; background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 18px; box-shadow: var(--shadow-sm); position: relative; }
     .metric-title { font-size: 0.75rem; color: var(--text-muted); font-weight: 700; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
     .metric-value { font-size: 1.8rem; font-weight: 800; color: var(--text-primary); display: flex; align-items: baseline; gap: 6px; }
     .metric-unit { font-size: 1rem; color: var(--text-muted); font-weight: 600; }
@@ -165,7 +171,7 @@ def home():
     .pipe-segment.faded { background: var(--accent-peach); opacity: 0.6; }
     .pipe-segment.empty { background: var(--border-color); }
     .pipe-value { width: 40px; text-align: right; font-weight: 800; color: var(--text-primary); }
-    .matrix-chart { display: flex; align-items: center; gap: 10px; width: 100px; color: var(--text-muted); font-weight: 600; font-size: 0.75rem; }
+    .matrix-chart { display: flex; align-items: center; gap: 10px; width: 100px; white-space: nowrap; color: var(--text-muted); font-weight: 600; font-size: 0.75rem; }
     .matrix-chart svg { width: 35px; height: 14px; stroke: var(--text-muted); stroke-width: 1.5; fill: none; }
     .matrix-squares { flex: 1; display: flex; gap: 4px; }
     .sq { width: 10px; height: 14px; border-radius: 2px; }
@@ -179,11 +185,65 @@ def home():
     .console-text { font-size: 0.85rem; color: #F3F4F6; display: flex; align-items: center; gap: 12px; font-family: 'JetBrains Mono', monospace; }
     .blinking-cursor { display: inline-block; width: 10px; height: 18px; background-color: var(--accent-peach); animation: blink 1s step-end infinite; }
 
+    /* --- Tablet --- */
     @media (max-width: 1024px) {
       .main-stage { grid-template-columns: 1fr; }
-      .core-area { min-height: 450px; order: -1; }
-      .side-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+      .core-area { min-height: clamp(300px, 80vw, 480px); order: -1; }
+      .side-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
       .data-panels-grid { grid-template-columns: 1fr; }
+      .top-metrics { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* --- Celular --- */
+    @media (max-width: 640px) {
+      body {
+        padding: 14px;
+        padding-left: max(14px, env(safe-area-inset-left));
+        padding-right: max(14px, env(safe-area-inset-right));
+        padding-bottom: max(14px, env(safe-area-inset-bottom));
+      }
+      .dashboard { gap: 16px; }
+
+      .header { padding-bottom: 12px; }
+      .header h1 { font-size: clamp(1.7rem, 9vw, 2.2rem); margin-bottom: 10px; }
+      .header-sub { flex-direction: column; gap: 4px; font-size: 0.68rem; line-height: 1.4; }
+
+      .top-metrics { grid-template-columns: 1fr; gap: 12px; }
+      .metric-panel { padding: 14px; }
+      .metric-value { font-size: 1.5rem; }
+      .bar-chart-mini { right: 14px; bottom: 14px; }
+
+      .main-stage { gap: 14px; margin-top: 8px; }
+      .side-col { gap: 14px; }
+      .module-box { padding: 16px; }
+      .module-list li { gap: 12px; }
+      .module-list li span:last-child { text-align: right; }
+
+      .data-panels-grid { gap: 14px; margin-top: 0; }
+      .data-card { padding: 16px; }
+      .data-card-header { margin-bottom: 16px; }
+
+      .pipeline-row { gap: 10px; font-size: 0.72rem; margin-bottom: 12px; }
+      .pipe-label { width: 62px; }
+      .pipe-value { width: 34px; }
+
+      /* Matrix: título + gráfico na 1ª linha, quadradinhos ocupam a 2ª linha inteira */
+      .matrix-row { flex-wrap: wrap; gap: 6px 10px; margin-bottom: 16px; font-size: 0.72rem; }
+      .matrix-label { flex: 1 1 auto; width: auto; }
+      .matrix-chart { width: auto; }
+      .matrix-squares { flex: 1 1 100%; order: 3; gap: 3px; }
+      .sq { flex: 1; width: auto; min-width: 0; }
+
+      .bottom-console { padding: 16px; margin-top: 0; }
+      .console-text { align-items: flex-start; gap: 8px; font-size: 0.75rem; }
+      #console-msg { flex: 1; min-width: 0; overflow-wrap: anywhere; line-height: 1.5; }
+      .blinking-cursor { width: 8px; height: 14px; flex-shrink: 0; margin-top: 2px; }
+    }
+
+    /* Telas muito pequenas */
+    @media (max-width: 360px) {
+      .metric-value { font-size: 1.3rem; }
+      .module-title { font-size: 0.9rem; }
     }
   </style>
 </head>
