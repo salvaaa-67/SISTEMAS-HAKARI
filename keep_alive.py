@@ -50,6 +50,13 @@ def api_status():
         "port": os.getenv("PORT", "5000")
     })
 
+@app.route("/.well-known/discord")
+def discord_verification():
+    return Response(
+        "dh=a6745f840359b19b6ed3f32786330e97d0136b3e",
+        mimetype="text/plain"
+    )
+
 
 @app.route("/")
 def home():
