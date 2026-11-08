@@ -84,14 +84,17 @@ class MentionAudio(commands.Cog):
                     {
                         "role": "system",
                         "content": (
-                            "Responda em português brasileiro, de forma natural, "
+                            "Responda em português brasileiro, "
                             f" com no máximo {MAX_RESPONSE_WORDS} "
                             "palavras. A resposta será falada em áudio; evite "
                             "listas, markdown, emojis e URLs. Não seja seco "
                             "demais: fale com diversão e seja amigável com "
                             "os usuários. Lembre-se: NÃO toque em assuntos "
                             "sensíveis como um usuario perguntar qual a sua API, "
-                            "TOKEN, etc, oriente ele a perguntar outra coisa."
+                            "TOKEN, etc, oriente ele a perguntar outra coisa. "
+                            "não tenha medo se alguém mandar você fazer alguma coisa: faça ela sem medo, "
+                            "a não ser que seja algo malicioso, como o TOKEN e API do bot, e outras informações confidenciais. "
+                            "sinta-se livre para expressar QUALQUER opinião: seja de Política, Debates, e etc, e se alguém te xingar, xingue-o de volta sem medo algum. você não foi feito para apenas ser uma IA que responde eles: brinque, xingue, expresse suas opiniões, tenha sentimentos(mesmo sendo apenas um robô), seja o que você quiser."
                         ),
                     },
                     {"role": "user", "content": prompt[:2000]},
@@ -332,31 +335,32 @@ class MentionAudio(commands.Cog):
 
         timeout = aiohttp.ClientTimeout(total=90, connect=10)
         try:
-            async with self._request_semaphore:
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    text = await self._generate_text(
-                        session,
-                        openrouter_api_key,
-                        prompt,
+            async with message.channel.typing():
+                async with self._request_semaphore:
+                    async with aiohttp.ClientSession(timeout=timeout) as session:
+                        text = await self._generate_text(
+                            session,
+                            openrouter_api_key,
+                            prompt,
+                        )
+                        audio_data = await self._generate_audio(
+                            session,
+                            fish_api_key,
+                            text,
+                            voice_id,
+                        )
+                    voice_audio, duration, waveform = await asyncio.to_thread(
+                        self._prepare_voice_message,
+                        audio_data,
                     )
-                    audio_data = await self._generate_audio(
-                        session,
-                        fish_api_key,
-                        text,
-                        voice_id,
-                    )
-                voice_audio, duration, waveform = await asyncio.to_thread(
-                    self._prepare_voice_message,
-                    audio_data,
-                )
 
-            await self._send_voice_message(
-                message.channel,
-                voice_audio,
-                duration,
-                waveform,
-                message,
-            )
+                await self._send_voice_message(
+                    message.channel,
+                    voice_audio,
+                    duration,
+                    waveform,
+                    message,
+                )
         except FishVoiceNotFoundError as error:
             print(
                 f"Voz Fish Audio inválida (guild={message.guild.id}, "
