@@ -265,7 +265,7 @@ def build_quote_image(
     brand_font = load_font(18, bold=True, font_data=font_data)
     draw.text(
         (IMAGE_SIZE[0] - 52, IMAGE_SIZE[1] - 38),
-        "HAKARI",
+        "AMIE",
         font=brand_font,
         fill=style["signature_color"],
         anchor="rs",
@@ -411,7 +411,7 @@ class Quotes(commands.Cog):
                 font_data,
             )
             await destination.send(
-                file=discord.File(BytesIO(image_data), filename="hakari_quote.png"),
+                file=discord.File(BytesIO(image_data), filename="amie_quote.png"),
                 view=QuoteMessageView(),
                 allowed_mentions=discord.AllowedMentions.none(),
             )

@@ -57,7 +57,7 @@ intents = discord.Intents.all()
 # CLASSE PRINCIPAL DO BOT
 # ============================================================
 
-class HakariBot(commands.Bot):
+class AmieBot(commands.Bot):
     def __init__(self) -> None:
         super().__init__(
             command_prefix=COMMAND_PREFIX,
@@ -267,7 +267,7 @@ class HakariBot(commands.Bot):
 # INSTÂNCIA DO BOT
 # ============================================================
 
-bot = HakariBot()
+bot = AmieBot()
 
 
 @bot.tree.error
@@ -532,7 +532,7 @@ async def main() -> None:
             "A variável TOKEN não foi configurada no Render."
         )
 
-    print("🚀 Inicializando Hakari...", flush=True)
+    print("🚀 Inicializando Amie...", flush=True)
     print(f"📁 Diretório principal: {BASE_DIR}", flush=True)
     print(f"📁 Diretório das Cogs: {COGS_DIR}", flush=True)
     print(f"🆔 Application ID: {APPLICATION_ID}", flush=True)
@@ -578,7 +578,7 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         print(
-            "⚠️ Hakari encerrado manualmente.",
+            "⚠️ Amie encerrado manualmente.",
             flush=True,
         )
 

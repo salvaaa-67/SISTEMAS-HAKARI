@@ -528,7 +528,7 @@ class Insta(commands.Cog):
         safe_filename = f"insta_{attachment.id}{suffix}"
         caption = message.content[:4000]
         try:
-            with tempfile.TemporaryDirectory(prefix="hakari_insta_") as temp_dir:
+            with tempfile.TemporaryDirectory(prefix="amie_insta_") as temp_dir:
                 image_path = Path(temp_dir) / safe_filename
                 await self.download_attachment(attachment, image_path)
                 embed = self.post_embed(

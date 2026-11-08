@@ -176,7 +176,7 @@ class Roblox(commands.Cog):
         return embed
 
     async def lookup_avatar(self, username: str) -> dict | None:
-        headers = {"User-Agent": "HakariRobloxAvatar/1.0"}
+        headers = {"User-Agent": "AmieRobloxAvatar/1.0"}
         async with aiohttp.ClientSession(
             timeout=ROBLOX_TIMEOUT, headers=headers
         ) as session:

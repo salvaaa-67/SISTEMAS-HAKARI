@@ -32,7 +32,7 @@ class ResetConfirmView(ComponentsV2View):
             return await interaction.response.send_message(view=components_v2(embed), ephemeral=True)
         
         if self.cog.pool:
-            await self.cog.pool.execute("DELETE FROM hakari_levels WHERE guild_id = $1", self.guild_id)
+            await self.cog.pool.execute("DELETE FROM amie_levels WHERE guild_id = $1", self.guild_id)
         
         embed = discord.Embed(title="✅ XP Resetado", description="Todo o XP de todos os usuários deste servidor foi resetado com sucesso.", color=discord.Color.red())
         await interaction.response.edit_message(embeds=[], view=components_v2(embed))
@@ -65,7 +65,7 @@ class Levels(commands.Cog):
             )
             await self.pool.execute(
                 '''
-                CREATE TABLE IF NOT EXISTS hakari_levels (
+                CREATE TABLE IF NOT EXISTS amie_levels (
                     guild_id BIGINT NOT NULL,
                     user_id BIGINT NOT NULL,
                     xp BIGINT NOT NULL DEFAULT 0,
@@ -97,7 +97,7 @@ class Levels(commands.Cog):
         if self.pool:
             await self.pool.execute(
                 '''
-                INSERT INTO hakari_levels (guild_id, user_id, xp, level)
+                INSERT INTO amie_levels (guild_id, user_id, xp, level)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (guild_id, user_id) DO UPDATE SET
                     xp = EXCLUDED.xp,
@@ -130,7 +130,7 @@ class Levels(commands.Cog):
         xp_gained = random.randint(15, 25)
 
         try:
-            row = await self.pool.fetchrow("SELECT xp, level FROM hakari_levels WHERE guild_id = $1 AND user_id = $2", guild_id, user_id)
+            row = await self.pool.fetchrow("SELECT xp, level FROM amie_levels WHERE guild_id = $1 AND user_id = $2", guild_id, user_id)
             current_xp = row["xp"] if row else 0
             current_level = row["level"] if row else 0
             
@@ -142,7 +142,7 @@ class Levels(commands.Cog):
             
             await self.pool.execute(
                 '''
-                INSERT INTO hakari_levels (guild_id, user_id, xp, level)
+                INSERT INTO amie_levels (guild_id, user_id, xp, level)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (guild_id, user_id) DO UPDATE SET
                     xp = EXCLUDED.xp,
@@ -186,7 +186,7 @@ class Levels(commands.Cog):
             return await interaction.response.send_message(view=components_v2(embed), ephemeral=True)
 
         row = await self.pool.fetchrow(
-            "SELECT xp, level FROM hakari_levels WHERE guild_id = $1 AND user_id = $2",
+            "SELECT xp, level FROM amie_levels WHERE guild_id = $1 AND user_id = $2",
             interaction.guild.id, target.id
         )
 
@@ -195,7 +195,7 @@ class Levels(commands.Cog):
         next_level_xp = self.get_next_level_xp(level) if level < 160 else MAX_XP
 
         rank_pos = await self.pool.fetchval(
-            "SELECT COUNT(*) FROM hakari_levels WHERE guild_id = $1 AND xp > $2",
+            "SELECT COUNT(*) FROM amie_levels WHERE guild_id = $1 AND xp > $2",
             interaction.guild.id, xp
         )
         pos = rank_pos + 1 if rank_pos is not None else 1
@@ -224,7 +224,7 @@ class Levels(commands.Cog):
             return await interaction.response.send_message(view=components_v2(embed), ephemeral=True)
 
         rows = await self.pool.fetch(
-            "SELECT user_id, xp, level FROM hakari_levels WHERE guild_id = $1 ORDER BY xp DESC LIMIT 10",
+            "SELECT user_id, xp, level FROM amie_levels WHERE guild_id = $1 ORDER BY xp DESC LIMIT 10",
             interaction.guild.id
         )
 
@@ -262,7 +262,7 @@ class Levels(commands.Cog):
             embed = discord.Embed(title="❌ Erro", description="Bots não recebem XP.", color=discord.Color.red())
             return await interaction.response.send_message(view=components_v2(embed), ephemeral=True)
 
-        row = await self.pool.fetchrow("SELECT xp, level FROM hakari_levels WHERE guild_id = $1 AND user_id = $2", interaction.guild.id, membro.id)
+        row = await self.pool.fetchrow("SELECT xp, level FROM amie_levels WHERE guild_id = $1 AND user_id = $2", interaction.guild.id, membro.id)
         current_xp = row["xp"] if row else 0
         
         new_xp, new_level = await self.set_user_xp(interaction.guild.id, membro.id, current_xp + quantidade)
@@ -288,7 +288,7 @@ class Levels(commands.Cog):
             embed = discord.Embed(title="❌ Erro", description="Bots não recebem XP.", color=discord.Color.red())
             return await interaction.response.send_message(view=components_v2(embed), ephemeral=True)
 
-        row = await self.pool.fetchrow("SELECT xp, level FROM hakari_levels WHERE guild_id = $1 AND user_id = $2", interaction.guild.id, membro.id)
+        row = await self.pool.fetchrow("SELECT xp, level FROM amie_levels WHERE guild_id = $1 AND user_id = $2", interaction.guild.id, membro.id)
         current_xp = row["xp"] if row else 0
         
         new_xp, new_level = await self.set_user_xp(interaction.guild.id, membro.id, current_xp - quantidade)

@@ -102,7 +102,7 @@ class Ranking(commands.Cog):
             )
             await self.pool.execute(
                 """
-                CREATE TABLE IF NOT EXISTS hakari_rank_call (
+                CREATE TABLE IF NOT EXISTS amie_rank_call (
                     guild_id BIGINT NOT NULL,
                     user_id BIGINT NOT NULL,
                     total_seconds BIGINT NOT NULL DEFAULT 0,
@@ -113,7 +113,7 @@ class Ranking(commands.Cog):
             )
             await self.pool.execute(
                 """
-                CREATE TABLE IF NOT EXISTS hakari_rank_messages (
+                CREATE TABLE IF NOT EXISTS amie_rank_messages (
                     guild_id BIGINT NOT NULL,
                     user_id BIGINT NOT NULL,
                     message_count BIGINT NOT NULL DEFAULT 0,
@@ -123,7 +123,7 @@ class Ranking(commands.Cog):
             )
             await self.pool.execute(
                 """
-                CREATE TABLE IF NOT EXISTS hakari_rank_posts (
+                CREATE TABLE IF NOT EXISTS amie_rank_posts (
                     guild_id BIGINT NOT NULL,
                     ranking_type TEXT NOT NULL,
                     channel_id BIGINT NOT NULL,
@@ -177,7 +177,7 @@ class Ranking(commands.Cog):
 
         try:
             await self.pool.execute(
-                "UPDATE hakari_rank_call SET active_since = NULL "
+                "UPDATE amie_rank_call SET active_since = NULL "
                 "WHERE active_since IS NOT NULL"
             )
             active_members = [
@@ -190,7 +190,7 @@ class Ranking(commands.Cog):
             if active_members:
                 await self.pool.executemany(
                     """
-                    INSERT INTO hakari_rank_call (
+                    INSERT INTO amie_rank_call (
                         guild_id, user_id, total_seconds, active_since
                     )
                     VALUES ($1, $2, 0, NOW())
@@ -221,13 +221,13 @@ class Ranking(commands.Cog):
             if before.channel is None and after.channel is not None:
                 await self.pool.execute(
                     """
-                    INSERT INTO hakari_rank_call (
+                    INSERT INTO amie_rank_call (
                         guild_id, user_id, total_seconds, active_since
                     )
                     VALUES ($1, $2, 0, NOW())
                     ON CONFLICT (guild_id, user_id) DO UPDATE SET
                         active_since = COALESCE(
-                            hakari_rank_call.active_since, NOW()
+                            amie_rank_call.active_since, NOW()
                         )
                     """,
                     member.guild.id,
@@ -236,7 +236,7 @@ class Ranking(commands.Cog):
             elif before.channel is not None and after.channel is None:
                 await self.pool.execute(
                     """
-                    UPDATE hakari_rank_call
+                    UPDATE amie_rank_call
                     SET total_seconds = total_seconds + GREATEST(
                             0,
                             FLOOR(EXTRACT(EPOCH FROM (NOW() - active_since)))::BIGINT
@@ -262,7 +262,7 @@ class Ranking(commands.Cog):
         try:
             await self.pool.execute(
                 """
-                UPDATE hakari_rank_call
+                UPDATE amie_rank_call
                 SET total_seconds = total_seconds + GREATEST(
                         0,
                         FLOOR(EXTRACT(EPOCH FROM (NOW() - active_since)))::BIGINT
@@ -288,10 +288,10 @@ class Ranking(commands.Cog):
         try:
             await self.pool.execute(
                 """
-                INSERT INTO hakari_rank_messages (guild_id, user_id, message_count)
+                INSERT INTO amie_rank_messages (guild_id, user_id, message_count)
                 VALUES ($1, $2, 1)
                 ON CONFLICT (guild_id, user_id) DO UPDATE SET
-                    message_count = hakari_rank_messages.message_count + 1
+                    message_count = amie_rank_messages.message_count + 1
                 """,
                 message.guild.id,
                 message.author.id,
@@ -442,7 +442,7 @@ class Ranking(commands.Cog):
                                FLOOR(EXTRACT(EPOCH FROM (NOW() - active_since)))::BIGINT
                            )
                        END AS score
-                FROM hakari_rank_call
+                FROM amie_rank_call
                 WHERE guild_id = $1
                 ORDER BY score DESC, user_id
                 LIMIT 10
@@ -453,7 +453,7 @@ class Ranking(commands.Cog):
             rows = await self.pool.fetch(
                 """
                 SELECT user_id, message_count AS score
-                FROM hakari_rank_messages
+                FROM amie_rank_messages
                 WHERE guild_id = $1
                 ORDER BY message_count DESC, user_id
                 LIMIT 10
@@ -491,7 +491,7 @@ class Ranking(commands.Cog):
         view = RankingPostView(self, ranking_type)
         post = await self.pool.fetchrow(
             """
-            SELECT channel_id, message_id FROM hakari_rank_posts
+            SELECT channel_id, message_id FROM amie_rank_posts
             WHERE guild_id = $1 AND ranking_type = $2
             """,
             guild.id,
@@ -517,7 +517,7 @@ class Ranking(commands.Cog):
                 await message.edit(embeds=[], view=components_v2(embeds, view=view))
             await self.pool.execute(
                 """
-                INSERT INTO hakari_rank_posts (
+                INSERT INTO amie_rank_posts (
                     guild_id, ranking_type, channel_id, message_id
                 )
                 VALUES ($1, $2, $3, $4)
@@ -570,7 +570,7 @@ class Ranking(commands.Cog):
         async with self.update_lock(guild_id, ranking_type):
             if ranking_type == "call":
                 await self.pool.execute(
-                    "DELETE FROM hakari_rank_call WHERE guild_id = $1", guild_id
+                    "DELETE FROM amie_rank_call WHERE guild_id = $1", guild_id
                 )
                 active_members = [
                     (guild_id, member.id)
@@ -581,7 +581,7 @@ class Ranking(commands.Cog):
                 if active_members:
                     await self.pool.executemany(
                         """
-                        INSERT INTO hakari_rank_call (
+                        INSERT INTO amie_rank_call (
                             guild_id, user_id, total_seconds, active_since
                         )
                         VALUES ($1, $2, 0, NOW())
@@ -593,7 +593,7 @@ class Ranking(commands.Cog):
                     )
             else:
                 await self.pool.execute(
-                    "DELETE FROM hakari_rank_messages WHERE guild_id = $1", guild_id
+                    "DELETE FROM amie_rank_messages WHERE guild_id = $1", guild_id
                 )
             await self.publish_ranking(guild, ranking_type)
 
@@ -735,7 +735,7 @@ class Ranking(commands.Cog):
         if ranking_type == "call":
             await self.pool.executemany(
                 """
-                INSERT INTO hakari_rank_call (
+                INSERT INTO amie_rank_call (
                     guild_id, user_id, total_seconds, active_since
                 )
                 VALUES ($1, $2, $3, NULL)
@@ -747,7 +747,7 @@ class Ranking(commands.Cog):
         else:
             await self.pool.executemany(
                 """
-                INSERT INTO hakari_rank_messages (guild_id, user_id, message_count)
+                INSERT INTO amie_rank_messages (guild_id, user_id, message_count)
                 VALUES ($1, $2, $3)
                 ON CONFLICT (guild_id, user_id) DO UPDATE SET
                     message_count = EXCLUDED.message_count

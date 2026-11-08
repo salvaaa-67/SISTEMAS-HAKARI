@@ -68,8 +68,8 @@ def home():
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#F7F2EA" />
-  <meta name="description" content="Status do bot HAKARI em tempo real." />
-  <title>HAKARI | Central de Status</title>
+  <meta name="description" content="Status do bot AMIE em tempo real." />
+  <title>AMIE | Central de Status</title>
 
   <!-- Fontes Premium -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -252,7 +252,7 @@ def home():
   <div class="dashboard">
     <!-- Header -->
     <header class="header">
-      <h1>HAKARI CORE.</h1>
+      <h1>AMIE CORE.</h1>
       <div class="header-sub">
         <span>ORQUESTRADOR EDITORIAL &rarr; FLUXO DE DADOS &rarr; PRODUCTION</span>
         <span>ENGINE V5</span>
@@ -289,7 +289,7 @@ def home():
       <div class="side-col">
         <div class="module-box">
           <div class="module-header">01 / IDENTIDADE</div>
-          <div class="module-title">HAKARI BOT</div>
+          <div class="module-title">AMIE BOT</div>
           <div class="module-content">Moderação, utilidades, automação e entretenimento perfeitamente orquestrados. Famoso pelo comando <strong>/tomate</strong>.</div>
         </div>
         <div class="module-box">

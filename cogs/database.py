@@ -18,7 +18,7 @@ from typing import Any, AsyncIterator, Iterable
 # Segundos desde a época Unix (substitui NOW() do PostgreSQL)
 UNIX_NOW = "CAST(strftime('%s', 'now') AS INTEGER)"
 
-DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "hakari.db"
+DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "amie.db"
 
 _PLACEHOLDER = re.compile(r"\$(\d+)")
 

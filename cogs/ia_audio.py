@@ -169,7 +169,7 @@ class MentionAudio(commands.Cog):
 
     @staticmethod
     def _prepare_voice_message(audio_data: bytes) -> tuple[bytes, float, str]:
-        with tempfile.TemporaryDirectory(prefix="hakari_ia_") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="amie_ia_") as temp_dir:
             input_path = Path(temp_dir) / "resposta_original.mp3"
             output_path = Path(temp_dir) / "resposta.ogg"
             input_path.write_bytes(audio_data)
@@ -267,7 +267,7 @@ class MentionAudio(commands.Cog):
         waveform: str,
         reply_to: discord.Message,
     ) -> discord.Message:
-        file = discord.File(BytesIO(audio_data), filename="resposta-hakari.ogg")
+        file = discord.File(BytesIO(audio_data), filename="resposta-amie.ogg")
         state = channel._state
         with discord.http.handle_message_parameters(
             file=file,

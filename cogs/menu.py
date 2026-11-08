@@ -172,8 +172,8 @@ FISH_PUBLIC_VOICE_SPECS = (
     },
 )
 
-FALLBACK_MENU_BANNER = "https://i.postimg.cc/kgv8f49w/banner-hakari-bot.png"
-MENU_WEBSITE_URL = "https://hakaribot.onrender.com"
+FALLBACK_MENU_BANNER = "https://i.postimg.cc/nLzpKqVN/439b1148bd09f66899575c18615bba37.jpg"
+MENU_WEBSITE_URL = "https://amiebot.onrender.com"
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "guild_config.json"
 WELCOME_ASSETS_DIR = CONFIG_PATH.parent / "welcome_assets"
 MODULES = {
@@ -183,7 +183,7 @@ MODULES = {
     "musica": "Música",
     "quotes": "Quotes",
     "resenha": "Resenha",
-    "sohakari": "So Hakari",
+    "soamie": "So Amie",
     "tomate": "Tomates",
     "utilidades": "Utilidades",
     "welcome": "Boas-vindas",
@@ -1167,7 +1167,7 @@ class QuotePreviewButton(discord.ui.Button):
                 ephemeral=True,
             )
         await interaction.followup.send(
-            file=discord.File(BytesIO(image_data), filename="hakari_quote_preview.png"),
+            file=discord.File(BytesIO(image_data), filename="amie_quote_preview.png"),
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -2588,7 +2588,7 @@ class Menu(commands.Cog):
             )
             await self.pool.execute(
                 """
-                CREATE TABLE IF NOT EXISTS hakari_guild_config (
+                CREATE TABLE IF NOT EXISTS amie_guild_config (
                     guild_id BIGINT PRIMARY KEY,
                     config JSONB NOT NULL,
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -2597,7 +2597,7 @@ class Menu(commands.Cog):
             )
             await self.pool.execute(
                 """
-                CREATE TABLE IF NOT EXISTS hakari_welcome_assets (
+                CREATE TABLE IF NOT EXISTS amie_welcome_assets (
                     guild_id BIGINT NOT NULL,
                     asset_key TEXT NOT NULL,
                     filename TEXT NOT NULL,
@@ -2610,7 +2610,7 @@ class Menu(commands.Cog):
             if self.config:
                 await self.pool.executemany(
                     """
-                    INSERT INTO hakari_guild_config (guild_id, config)
+                    INSERT INTO amie_guild_config (guild_id, config)
                     VALUES ($1, $2::jsonb)
                     ON CONFLICT (guild_id) DO NOTHING
                     """,
@@ -2620,7 +2620,7 @@ class Menu(commands.Cog):
                     ],
                 )
             rows = await self.pool.fetch(
-                "SELECT guild_id, config FROM hakari_guild_config"
+                "SELECT guild_id, config FROM amie_guild_config"
             )
             for row in rows:
                 stored_config = row["config"]
@@ -2653,7 +2653,7 @@ class Menu(commands.Cog):
             try:
                 await self.pool.executemany(
                     """
-                    INSERT INTO hakari_guild_config (guild_id, config)
+                    INSERT INTO amie_guild_config (guild_id, config)
                     VALUES ($1, $2::jsonb)
                     ON CONFLICT (guild_id) DO UPDATE SET
                         config = EXCLUDED.config,
@@ -2834,7 +2834,7 @@ class Menu(commands.Cog):
         if self.pool is not None:
             await self.pool.execute(
                 """
-                INSERT INTO hakari_welcome_assets (guild_id, asset_key, filename, data)
+                INSERT INTO amie_welcome_assets (guild_id, asset_key, filename, data)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (guild_id, asset_key) DO UPDATE SET
                     filename = EXCLUDED.filename,
@@ -2873,7 +2873,7 @@ class Menu(commands.Cog):
         if self.pool is not None:
             row = await self.pool.fetchrow(
                 """
-                SELECT filename, data FROM hakari_welcome_assets
+                SELECT filename, data FROM amie_welcome_assets
                 WHERE guild_id = $1 AND asset_key = $2
                 """,
                 guild_id,
@@ -2948,7 +2948,7 @@ class Menu(commands.Cog):
 
     def overview_embed(self, guild: discord.Guild) -> discord.Embed:
         embed = discord.Embed(
-            title="salve salve meu cria, tudo na paz? vai querer configurar o que pro Hakari hoje?",
+            title="salve salve meu cria, tudo na paz? vai querer configurar o que pro Amie hoje?",
             description=(
                 "encontrou um b.o no bot? chame o [Salvador](https://discord.com/users/1344736884089426022)"
             ),
@@ -3115,8 +3115,8 @@ class Menu(commands.Cog):
             )
         if action == "reset":
             if self.pool is not None:
-                await self.pool.execute("DELETE FROM hakari_guild_config")
-                await self.pool.execute("DELETE FROM hakari_welcome_assets")
+                await self.pool.execute("DELETE FROM amie_guild_config")
+                await self.pool.execute("DELETE FROM amie_welcome_assets")
             self.config.clear()
             shutil.rmtree(WELCOME_ASSETS_DIR, ignore_errors=True)
             await self.save()
@@ -3156,11 +3156,11 @@ class Menu(commands.Cog):
             async with self.pool.acquire() as connection:
                 async with connection.transaction():
                     await connection.execute(
-                        "DELETE FROM hakari_guild_config WHERE guild_id = $1",
+                        "DELETE FROM amie_guild_config WHERE guild_id = $1",
                         guild_id,
                     )
                     await connection.execute(
-                        "DELETE FROM hakari_welcome_assets WHERE guild_id = $1",
+                        "DELETE FROM amie_welcome_assets WHERE guild_id = $1",
                         guild_id,
                     )
 
