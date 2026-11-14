@@ -22,6 +22,7 @@ from .quotes import (
     fetch_quote_font,
     quote_style_with_defaults,
 )
+from .ticket import ticket_config_defaults, validate_ticket_config
 
 
 DEVELOPER_ID = 1344736884089426022
@@ -180,6 +181,7 @@ MODULES = {
     "admin": "Moderação",
     "afk": "AFK",
     "boost": "Boost",
+    "tickets": "Sistema de tickets",
     "musica": "Música",
     "quotes": "Quotes",
     "resenha": "Resenha",
@@ -254,6 +256,19 @@ SETTINGS = {
             "welcome_ping_member": ("Mencionar o novo membro", "toggle"),
             "welcome_text": ("Textos da embed", "welcome_text"),
             "welcome_assets": ("Thumbnail, imagem e ícone", "welcome_assets"),
+        },
+    },
+    "tickets": {
+        "label": "Sistema de tickets",
+        "description": (
+            "Configure a equipe de suporte, os canais e todo o conteúdo do painel, "
+            "dos tickets e do formulário de abertura."
+        ),
+        "items": {
+            "tickets_support_roles": ("Cargos de suporte", "roles"),
+            "tickets_panel_channel": ("Canal do painel", "channel"),
+            "tickets_log_channel": ("Canal de logs", "channel"),
+            "tickets_config": ("Embeds, opções, botões e modal", "ticket_config"),
         },
     },
     "insta": {
@@ -530,6 +545,42 @@ class TextSettingModal(discord.ui.Modal):
         await self.menu.set_value(self.guild_id, self.key, value or None)
         await interaction.response.send_message(
             f"Configuração salva: `{value}`." if value else "Configuração removida.",
+            ephemeral=True,
+        )
+
+
+class TicketConfigModal(discord.ui.Modal):
+    def __init__(self, menu: "Menu", guild_id: int):
+        super().__init__(title="Configurar sistema de tickets")
+        self.menu = menu
+        self.guild_id = guild_id
+        current = menu.get_value(
+            guild_id, "tickets_config", ticket_config_defaults()
+        )
+        current_json = json.dumps(current, ensure_ascii=False, indent=2)
+        self.config_input = discord.ui.TextInput(
+            label="Configuração JSON",
+            style=discord.TextStyle.paragraph,
+            placeholder=(
+                "form_fields aceita label, placeholder, style (short/paragraph) e required."
+            ),
+            default=current_json if len(current_json) <= 4000 else None,
+            max_length=4000,
+            required=True,
+        )
+        self.add_item(self.config_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        try:
+            config = validate_ticket_config(json.loads(self.config_input.value))
+        except (json.JSONDecodeError, ValueError) as error:
+            return await interaction.response.send_message(
+                f"Configuração inválida: {error}", ephemeral=True
+            )
+        await self.menu.set_value(self.guild_id, "tickets_config", config)
+        await interaction.response.send_message(
+            "Configuração de tickets salva. O próximo painel publicado já usará "
+            "as alterações.",
             ephemeral=True,
         )
 
@@ -880,6 +931,7 @@ class SettingSelect(discord.ui.Select):
                         "welcome_assets",
                         "quotes_style",
                         "fish_voices",
+                        "ticket_config",
                     }
                     else "Informe o texto usado por este módulo."
                     if kind == "text"
@@ -977,6 +1029,7 @@ class ChannelSettingSelect(discord.ui.ChannelSelect):
             "ranking_messages": "Selecione o canal do ranking de mensagens",
             "logs": "Selecione o canal que receberá os registros",
             "levels": "Selecione o canal para enviar os níveis",
+            "tickets": "Selecione um canal de texto",
         }.get(view.category, "Selecione o canal deste módulo")
         super().__init__(
             placeholder=placeholder,
@@ -1523,6 +1576,20 @@ class TextSettingButton(discord.ui.Button):
         label = SETTINGS[view.category]["items"][view.setting][0]
         await interaction.response.send_modal(
             TextSettingModal(view.menu, interaction.guild_id, view.setting, label)
+        )
+
+
+class TicketConfigButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(
+            label="Editar configuração JSON",
+            style=discord.ButtonStyle.primary,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view: MenuView = self.view
+        await interaction.response.send_modal(
+            TicketConfigModal(view.menu, interaction.guild_id)
         )
 
 
@@ -2100,6 +2167,19 @@ class MenuView(ComponentsV2View):
                 f"{QUOTE_AVATAR_POSITIONS[style['avatar_position']]}\n"
                 f"Fundo: {style['background_mode']}"
             )
+        elif kind == "ticket_config":
+            try:
+                ticket_config = validate_ticket_config(
+                    value or ticket_config_defaults()
+                )
+                display = (
+                    f"Tipos: {len(ticket_config['types'])}\n"
+                    f"Botões no painel: {len(ticket_config['panel']['buttons'])}\n"
+                    f"Campos do formulário: {len(ticket_config['form_fields'])}\n"
+                    f"Título do painel: {ticket_config['panel']['title']}"
+                )
+            except ValueError:
+                display = "Configuração inválida; abra o editor para corrigir."
         elif value is None:
             display = "Desconfigurado"
         elif kind == "role":
@@ -2168,6 +2248,8 @@ class MenuView(ComponentsV2View):
             elif kind == "text":
                 label = SETTINGS[self.category]["items"][self.setting][0]
                 self.add_item(TextSettingButton(self, label))
+            elif kind == "ticket_config":
+                self.add_item(TicketConfigButton())
             elif kind == "welcome_text":
                 self.add_item(WelcomeTextButton())
             elif kind == "welcome_assets":
