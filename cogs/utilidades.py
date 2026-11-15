@@ -48,6 +48,108 @@ class HelpPager(ComponentsV2View):
         await interaction.response.edit_message(view=self)
 
 
+class MarriageProposalView(ComponentsV2View):
+    MARRIAGE_IMAGE = (
+        "https://i.postimg.cc/tYQ3yBss/"
+        "Love-La-Bride-HD-Wallpaper-by-Takano-Yuki-1487582-Zerochan-Anime-Image-Board.jpg"
+    )
+
+    def __init__(
+        self,
+        utilities: "Utilities",
+        guild_id: int,
+        proposer: discord.Member,
+        recipient: discord.Member,
+    ) -> None:
+        super().__init__(timeout=120)
+        self.utilities = utilities
+        self.guild_id = guild_id
+        self.proposer = proposer
+        self.recipient = recipient
+        self.message: discord.Message | None = None
+        self.accept_button = discord.ui.Button(
+            label="Aceitar",
+            style=discord.ButtonStyle.success,
+            emoji="💍",
+        )
+        self.decline_button = discord.ui.Button(
+            label="Recusar",
+            style=discord.ButtonStyle.danger,
+            emoji="💔",
+        )
+        self.accept_button.callback = self.accept
+        self.decline_button.callback = self.decline
+        self.add_item(self.accept_button)
+        self.add_item(self.decline_button)
+        self.set_message(
+            content=(
+                f"💌 {recipient.mention}, {proposer.mention} está te pedindo em casamento!\n"
+                "Aceite ou recuse em até 2 minutos."
+            )
+        )
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.recipient.id:
+            await interaction.response.send_message(
+                "Este pedido só pode ser respondido pela pessoa convidada.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    async def on_timeout(self) -> None:
+        self._disable_buttons()
+        self.set_message(content="⌛ O pedido de casamento expirou sem resposta.")
+        if self.message is not None:
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException as error:
+                log.warning("Não foi possível atualizar o pedido de casamento expirado: %s", error)
+
+    def _disable_buttons(self) -> None:
+        for item in self.children:
+            if isinstance(item, discord.ui.ActionRow):
+                for child in item.children:
+                    if isinstance(child, discord.ui.Button):
+                        child.disabled = True
+
+    async def accept(self, interaction: discord.Interaction) -> None:
+        result, married_at = await self.utilities._accept_marriage(
+            self.guild_id,
+            self.proposer.id,
+            self.recipient.id,
+        )
+        self._disable_buttons()
+        if result == "accepted" and married_at is not None:
+            self.set_message(
+                content=(
+                    f"💞 {self.proposer.mention} e {self.recipient.mention} aceitaram "
+                    f"se casar! Desde <t:{married_at}:F> (<t:{married_at}:R>)."
+                ),
+                hero_url=self.MARRIAGE_IMAGE,
+            )
+        elif result == "already_married" and married_at is not None:
+            self.set_message(
+                content=(
+                    f"💍 {self.proposer.mention} e {self.recipient.mention} já estão "
+                    f"casados desde <t:{married_at}:F> (<t:{married_at}:R>)."
+                ),
+                hero_url=self.MARRIAGE_IMAGE,
+            )
+        else:
+            self.set_message(
+                content="Uma das pessoas já está casada. O pedido não foi aceito."
+            )
+        await interaction.response.edit_message(view=self)
+        self.stop()
+
+    async def decline(self, interaction: discord.Interaction) -> None:
+        self._disable_buttons()
+        self.set_message(content=f"💌 {self.recipient.mention} recusou o pedido de casamento.")
+        await interaction.response.edit_message(view=self)
+        self.stop()
+
+
 class ServerInfo(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -230,6 +332,25 @@ class UserInfo(commands.Cog):
 
 
 class Utilities(commands.Cog):
+    AFFECTION_ACTIONS = {
+        "abraço": (
+            "deu um abraço apertado em",
+            "https://i.postimg.cc/JGVNmps0/Pin-on-Anime.gif",
+        ),
+        "beijo": (
+            "deu um beijo carinhoso em",
+            "https://i.postimg.cc/0bRYxVz6/yuri.gif",
+        ),
+        "cafuné": (
+            "fez um cafuné em",
+            "https://i.postimg.cc/4m6z3pcs/Head-pat.gif",
+        ),
+        "carinho": (
+            "fez carinho em",
+            "https://i.postimg.cc/4m6z3pcs/Head-pat.gif",
+        ),
+    }
+
     def __init__(self, bot):
         self.bot = bot
         self.pool: Pool | None = None
@@ -253,6 +374,42 @@ class Utilities(commands.Cog):
         if self.pool is not None:
             await self.pool.close()
             self.pool = None
+
+    async def _accept_marriage(
+        self,
+        guild_id: int,
+        proposer_id: int,
+        recipient_id: int,
+    ) -> tuple[str, int | None]:
+        if self.pool is None:
+            raise RuntimeError("O armazenamento de casamentos não está disponível.")
+        married_at = int(discord.utils.utcnow().timestamp())
+        async with self.pool.acquire() as connection:
+            async with connection.transaction():
+                existing = await connection.fetchrow(
+                    "SELECT user_id, partner_id, married_at FROM amie_marriages "
+                    "WHERE guild_id = $1 AND "
+                    "(user_id = $2 OR partner_id = $2 OR user_id = $3 OR partner_id = $3)",
+                    guild_id,
+                    proposer_id,
+                    recipient_id,
+                )
+                if existing is not None:
+                    if {
+                        existing["user_id"],
+                        existing["partner_id"],
+                    } == {proposer_id, recipient_id}:
+                        return "already_married", int(existing["married_at"])
+                    return "unavailable", None
+                await connection.execute(
+                    "INSERT INTO amie_marriages "
+                    "(guild_id, user_id, partner_id, married_at) VALUES ($1, $2, $3, $4)",
+                    guild_id,
+                    proposer_id,
+                    recipient_id,
+                    married_at,
+                )
+        return "accepted", married_at
 
     def _help_pages(self) -> list[str]:
         category_names = {
@@ -442,41 +599,23 @@ class Utilities(commands.Cog):
             return await ctx.send("Contas de bot não podem se casar.")
         if self.pool is None:
             raise RuntimeError("O armazenamento de casamentos não está disponível.")
-        married_at = int(discord.utils.utcnow().timestamp())
-        already_married_at: int | None = None
-        conflict = False
-        async with self.pool.acquire() as connection:
-            async with connection.transaction():
-                existing = await connection.fetchrow(
-                    "SELECT user_id, partner_id, married_at FROM amie_marriages "
-                    "WHERE guild_id = $1 AND "
-                    "(user_id = $2 OR partner_id = $2 OR user_id = $3 OR partner_id = $3)",
-                    guild.id,
-                    ctx.author.id,
-                    member.id,
-                )
-                if existing is not None:
-                    if {
-                        existing["user_id"],
-                        existing["partner_id"],
-                    } == {ctx.author.id, member.id}:
-                        already_married_at = int(existing["married_at"])
-                    else:
-                        conflict = True
-                else:
-                    await connection.execute(
-                        "INSERT INTO amie_marriages "
-                        "(guild_id, user_id, partner_id, married_at) VALUES ($1, $2, $3, $4)",
-                        guild.id,
-                        ctx.author.id,
-                        member.id,
-                        married_at,
-                    )
-        if conflict:
+        existing = await self.pool.fetchrow(
+            "SELECT user_id, partner_id, married_at FROM amie_marriages "
+            "WHERE guild_id = $1 AND "
+            "(user_id = $2 OR partner_id = $2 OR user_id = $3 OR partner_id = $3)",
+            guild.id,
+            ctx.author.id,
+            member.id,
+        )
+        if existing is not None and {
+            existing["user_id"],
+            existing["partner_id"],
+        } != {ctx.author.id, member.id}:
             return await ctx.send(
                 "Uma das pessoas já está casada. Use `,divorciar` antes de iniciar outro casamento."
             )
-        if already_married_at is not None:
+        if existing is not None:
+            already_married_at = int(existing["married_at"])
             embed = discord.Embed(
                 title="Casamento",
                 description=(
@@ -486,14 +625,60 @@ class Utilities(commands.Cog):
                 color=discord.Color.magenta(),
             )
             return await ctx.send(view=components_v2(embed))
+        proposal = MarriageProposalView(self, guild.id, ctx.author, member)
+        proposal.message = await ctx.send(view=proposal)
+
+    @commands.hybrid_command(
+        name="acao",
+        description="Faz um gesto carinhoso com seu cônjuge",
+    )
+    @app_commands.guild_only()
+    @app_commands.describe(
+        action="Escolha um gesto carinhoso",
+        member="A pessoa com quem você está casado",
+    )
+    @app_commands.choices(
+        action=[
+            app_commands.Choice(name="Abraço", value="abraço"),
+            app_commands.Choice(name="Beijo", value="beijo"),
+            app_commands.Choice(name="Cafuné", value="cafuné"),
+            app_commands.Choice(name="Carinho", value="carinho"),
+        ]
+    )
+    async def acao(
+        self,
+        ctx: commands.Context,
+        action: str,
+        member: discord.Member,
+    ) -> None:
+        guild = ctx.guild
+        if guild is None:
+            return await ctx.send("Este comando só pode ser usado em um servidor.")
+        if member.id == ctx.author.id:
+            return await ctx.send("Escolha outra pessoa para fazer esse gesto.")
+        if self.pool is None:
+            raise RuntimeError("O armazenamento de casamentos não está disponível.")
+        if action not in self.AFFECTION_ACTIONS:
+            return await ctx.send("Escolha uma das ações carinhosas disponíveis.")
+        marriage = await self.pool.fetchrow(
+            "SELECT user_id, partner_id FROM amie_marriages "
+            "WHERE guild_id = $1 AND "
+            "((user_id = $2 AND partner_id = $3) OR (user_id = $3 AND partner_id = $2))",
+            guild.id,
+            ctx.author.id,
+            member.id,
+        )
+        if marriage is None:
+            return await ctx.send(
+                "Vocês precisam estar casados um com o outro para usar essa ação."
+            )
+        action_text, image_url = self.AFFECTION_ACTIONS[action]
         embed = discord.Embed(
-            title="Casamento registrado",
-            description=(
-                f"💍 {ctx.author.mention} e {member.mention} agora estão casados!\n"
-                f"O casamento começou <t:{married_at}:F> (<t:{married_at}:R>)."
-            ),
+            title="Um momento fofo 💕",
+            description=f"{ctx.author.mention} {action_text} {member.mention}!",
             color=discord.Color.magenta(),
         )
+        embed.set_image(url=image_url)
         await ctx.send(view=components_v2(embed))
 
     @commands.hybrid_command(name="divorciar", description="Encerra seu casamento registrado")
